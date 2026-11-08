@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+src/generated/prisma/
+tmp/
+.DS_Store
+
+# Material do professor (não redistribuir)
+*.pdf

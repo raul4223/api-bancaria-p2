@@ -1,0 +1,200 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum ServiceSessionStatus {
+  OPEN
+  CLOSED
+  EXPIRED
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  SYSTEM
+}
+
+enum AccountStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  TRANSFER
+}
+
+enum TransferType {
+  PIX
+  TED
+  INTERNAL
+}
+
+enum TransactionStatus {
+  SUCCESS
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum PixKeyType {
+  CPF
+  EMAIL
+  PHONE
+  RANDOM
+}
+
+model User {
+  id              String           @id @default(uuid()) @db.Char(36)
+  name            String           @db.VarChar(120)
+  email           String           @unique @db.VarChar(254)
+  passwordHash    String           @db.VarChar(255)
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  serviceSessions ServiceSession[]
+  transactions    BankTransaction[]
+  blockedAccounts Account[]
+}
+
+model Customer {
+  id                      String           @id @default(uuid()) @db.Char(36)
+  name                    String           @db.VarChar(120)
+  cpf                     String           @unique @db.Char(11)
+  email                   String?          @unique @db.VarChar(254)
+  phone                   String?          @db.VarChar(20)
+  passwordHash            String           @db.VarChar(255)
+  failedPasswordAttempts  Int              @default(0)
+  passwordLockedUntil     DateTime?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  serviceSessions         ServiceSession[]
+  accounts                Account[]
+  pixKeys                 PixKey[]
+  beneficiaries           Beneficiary[]
+
+  @@index([name])
+}
+
+model ServiceSession {
+  id             String               @id @default(uuid()) @db.Char(36)
+  operatorUserId String               @db.Char(36)
+  customerId     String               @db.Char(36)
+  status         ServiceSessionStatus @default(OPEN)
+  openedAt       DateTime             @default(now())
+  expiresAt      DateTime
+  closedAt       DateTime?
+  operator       User                 @relation(fields: [operatorUserId], references: [id], onDelete: Restrict)
+  customer       Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  transactions   BankTransaction[]
+
+  @@index([operatorUserId, status])
+  @@index([customerId, openedAt])
+}
+
+model Account {
+  id                  String        @id @default(uuid()) @db.Char(36)
+  customerId          String?       @db.Char(36)
+  agency              String        @db.Char(4)
+  number              String        @db.VarChar(12)
+  type                AccountType
+  status              AccountStatus @default(ACTIVE)
+  blockReason         String?       @db.VarChar(240)
+  blockedAt           DateTime?
+  blockedByUserId     String?       @db.Char(36)
+  balanceCents        BigInt        @default(0)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  customer            Customer?     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  blockedBy           User?         @relation(fields: [blockedByUserId], references: [id], onDelete: Restrict)
+  pixKeys             PixKey[]
+  ledgerEntries       LedgerEntry[]
+  sourceTransactions  BankTransaction[] @relation("TransactionSource")
+  targetTransactions  BankTransaction[] @relation("TransactionDestination")
+
+  @@unique([agency, number])
+  @@index([customerId, createdAt])
+  @@index([status, type])
+}
+
+model BankTransaction {
+  id                   String            @id @default(uuid()) @db.Char(36)
+  operatorUserId       String            @db.Char(36)
+  serviceSessionId     String            @db.Char(36)
+  type                 TransactionType
+  transferType         TransferType?
+  amountCents          BigInt
+  feeCents             BigInt            @default(0)
+  sourceAccountId      String?           @db.Char(36)
+  destinationAccountId String?           @db.Char(36)
+  pixKeyUsed           String?           @db.VarChar(254)
+  description          String?           @db.VarChar(240)
+  idempotencyKey       String            @db.VarChar(120)
+  requestFingerprint   String            @db.Char(64)
+  status               TransactionStatus @default(SUCCESS)
+  resultData           Json?
+  createdAt            DateTime          @default(now())
+  operator             User              @relation(fields: [operatorUserId], references: [id], onDelete: Restrict)
+  serviceSession       ServiceSession    @relation(fields: [serviceSessionId], references: [id], onDelete: Restrict)
+  sourceAccount        Account?          @relation("TransactionSource", fields: [sourceAccountId], references: [id], onDelete: Restrict)
+  destinationAccount   Account?          @relation("TransactionDestination", fields: [destinationAccountId], references: [id], onDelete: Restrict)
+  ledgerEntries        LedgerEntry[]
+
+  @@unique([operatorUserId, idempotencyKey])
+  @@index([serviceSessionId, createdAt])
+  @@index([sourceAccountId, createdAt])
+  @@index([destinationAccountId, createdAt])
+}
+
+model LedgerEntry {
+  id            String         @id @default(uuid()) @db.Char(36)
+  transactionId String         @db.Char(36)
+  accountId     String         @db.Char(36)
+  direction     LedgerDirection
+  amountCents   BigInt
+  createdAt     DateTime       @default(now())
+  transaction   BankTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  account       Account        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt])
+  @@index([transactionId])
+}
+
+model PixKey {
+  id         String     @id @default(uuid()) @db.Char(36)
+  customerId String     @db.Char(36)
+  accountId  String     @db.Char(36)
+  keyType    PixKeyType
+  keyValue   String     @unique @db.VarChar(254)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  account    Account    @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, createdAt])
+  @@index([accountId, createdAt])
+}
+
+model Beneficiary {
+  id                       String       @id @default(uuid()) @db.Char(36)
+  customerId               String       @db.Char(36)
+  nickname                 String       @db.VarChar(80)
+  transferType             TransferType
+  pixKey                   String?      @db.VarChar(254)
+  destinationAgency        String?      @db.Char(4)
+  destinationAccountNumber String?      @db.VarChar(12)
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+  customer                 Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, createdAt])
+}
