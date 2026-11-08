@@ -1,33 +1,43 @@
 import { randomInt } from 'node:crypto';
-import { Prisma } from '../generated/prisma/client.ts';
+import type { Prisma } from '../generated/prisma/client.ts';
+import { prisma } from '../database/prisma.js';
 import { appErrors } from '../errors/appErrors.js';
 import { AccountRepository } from '../repositories/AccountRepository.js';
 import { customerAgency } from '../utils/bankAccount.js';
 
-// Service que abre e consulta contas do cliente em atendimento
+type DatabaseClient = Prisma.TransactionClient | typeof prisma;
+
+// Service que abre e consulta contas de clientes
 export class AccountService {
   // Receber o repository de contas
   constructor(private readonly accountRepository: AccountRepository) {}
 
-  // Abrir conta corrente ou poupança com saldo inicial zero
-  async open(input: { type: 'CHECKING' | 'SAVINGS' }, customerId: string) {
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      const number = String(randomInt(1_000_000, 9_999_999));
-      try {
-        return await this.accountRepository.create({
-          customerId,
-          agency: customerAgency,
-          number,
-          type: input.type,
-          balanceCents: 0n,
-        });
-      } catch (error) {
-        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
-          throw error;
-        if (attempt === 3) throw error;
-      }
+  // Gerar um número de conta de 7 dígitos ainda não usado na agência
+  private async generateNumber(client: DatabaseClient): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const number = String(randomInt(1_000_000, 10_000_000));
+      if (!(await this.accountRepository.existsByNumber(customerAgency, number, client)))
+        return number;
     }
     throw new Error('Não foi possível gerar número de conta.');
+  }
+
+  // Criar conta com saldo zero, dentro da transação recebida quando houver
+  async createForCustomer(
+    customerId: string,
+    type: 'CHECKING' | 'SAVINGS',
+    client: DatabaseClient = prisma,
+  ) {
+    const number = await this.generateNumber(client);
+    return this.accountRepository.create(
+      { customerId, agency: customerAgency, number, type, balanceCents: 0n },
+      client,
+    );
+  }
+
+  // Abrir conta adicional (corrente ou poupança) para o cliente atendido
+  async open(input: { type: 'CHECKING' | 'SAVINGS' }, customerId: string) {
+    return this.createForCustomer(customerId, input.type);
   }
 
   // Listar contas do cliente atendido com paginação

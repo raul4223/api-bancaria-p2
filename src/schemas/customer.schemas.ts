@@ -9,6 +9,12 @@ export const createCustomerSchema = z.object({
   email: z.string().email().max(254).optional(),
   phone: z.string().trim().min(10).max(20).optional(),
   customerPassword: z.string().refine((value) => !isWeakCustomerPassword(value), 'Senha fraca'),
+  accountType: z
+    .enum(['CHECKING', 'SAVINGS'])
+    .default('CHECKING')
+    .openapi({
+      description: 'Tipo da primeira conta, aberta junto com o cadastro (padrão: corrente)',
+    }),
 });
 
 // Validar os campos permitidos para atualização de cliente

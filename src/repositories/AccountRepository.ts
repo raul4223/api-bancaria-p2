@@ -6,8 +6,17 @@ type DatabaseClient = Prisma.TransactionClient | typeof prisma;
 // Repository que consulta contas e atualiza saldos materializados
 export class AccountRepository {
   // Criar conta com saldo inicial zerado
-  create(data: Prisma.AccountUncheckedCreateInput) {
-    return prisma.account.create({ data });
+  create(data: Prisma.AccountUncheckedCreateInput, client: DatabaseClient = prisma) {
+    return client.account.create({ data });
+  }
+
+  // Verificar se já existe conta com a agência e o número informados
+  async existsByNumber(
+    agency: string,
+    number: string,
+    client: DatabaseClient = prisma,
+  ): Promise<boolean> {
+    return (await client.account.count({ where: { agency, number } })) > 0;
   }
 
   // Listar contas do cliente do atendimento

@@ -96,7 +96,7 @@ No Swagger, execute `POST /api/v1/auth/login` com as credenciais definidas no `.
 
 Use o `accessToken` recebido no botão **Authorize** (`bearerAuth`). Para iniciar um atendimento, execute `POST /api/v1/service-sessions` com o CPF e a senha fictícia de um cliente já cadastrado. A resposta contém o identificador `id` do atendimento. Nas operações em nome dele, informe esse valor em `X-Service-Session-Id` no **Authorize** (`serviceSession`).
 
-Clientes são consultados, alterados e excluídos pelo **CPF** (`/api/v1/customers/{cpf}`). Contas são identificadas pelo **número da conta** (7 dígitos, agência `0001`), devolvido na abertura e na listagem `GET /api/v1/customer-service/accounts`; use esse número em depósitos, saques, transferências, extrato e bloqueio.
+O cadastro do cliente (`POST /api/v1/customers`) já abre a primeira conta (corrente por padrão) e devolve a agência e o número. Clientes são consultados, alterados e excluídos pelo **CPF** (`/api/v1/customers/{cpf}`). Contas são identificadas pelo **número da conta** (7 dígitos, agência `0001`), devolvido na abertura e na listagem `GET /api/v1/customer-service/accounts`; use esse número em depósitos, saques, transferências, extrato e bloqueio.
 
 O fluxo de transferência também exige um UUID novo em `Idempotency-Key`. Repetir a mesma requisição com a mesma chave devolve a resposta gravada com HTTP 200; reutilizar a chave com outro payload retorna 409.
 

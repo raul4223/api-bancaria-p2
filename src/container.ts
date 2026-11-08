@@ -32,12 +32,12 @@ const pixKeyRepository = new PixKeyRepository();
 const beneficiaryRepository = new BeneficiaryRepository();
 
 const authService = new AuthService(userRepository);
-const customerService = new CustomerService(customerRepository);
 const serviceSessionService = new ServiceSessionService(
   serviceSessionRepository,
   customerRepository,
 );
 const accountService = new AccountService(accountRepository);
+const customerService = new CustomerService(customerRepository, accountService);
 const transactionService = new TransactionService(transactionRepository, accountRepository);
 const transferService = new TransferService(
   accountRepository,

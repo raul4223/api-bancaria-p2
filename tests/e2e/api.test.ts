@@ -253,6 +253,18 @@ describe('API bancária simulada', () => {
     expect(createA.body).not.toHaveProperty('passwordHash');
     customerAId = createA.body.id as string;
     customerCId = createC.body.id as string;
+    for (const created of [createA, createB, createC]) {
+      expect(created.body.accounts).toHaveLength(1);
+      expect(created.body.accounts[0]).toMatchObject({
+        agency: '0001',
+        type: 'CHECKING',
+        status: 'ACTIVE',
+        balanceCents: '0',
+      });
+      expect(created.body.accounts[0].number).toMatch(/^\d{7}$/);
+    }
+    ({ id: accountA1Id, number: accountA1Number } = createA.body.accounts[0]);
+    ({ id: accountB1Id, number: accountB1Number } = createB.body.accounts[0]);
 
     const duplicateEmail = await post(`${apiBase}/customers`, {
       name: 'E-mail duplicado',
@@ -301,13 +313,17 @@ describe('API bancária simulada', () => {
       name: 'Cadastro Temporário',
       cpf: '12345678909',
       customerPassword: '736194',
+      accountType: 'SAVINGS',
     });
     expect(createTemporary.status).toBe(201);
+    expect(createTemporary.body.accounts[0].type).toBe('SAVINGS');
+    const temporaryAccountId = createTemporary.body.accounts[0].id as string;
     expect((await get(`${apiBase}/customers/123.456.789-09`)).body.name).toBe(
       'Cadastro Temporário',
     );
     expect((await get(`${apiBase}/customers/${createTemporary.body.id}`)).status).toBe(422);
     expect((await remove(`${apiBase}/customers/12345678909`)).status).toBe(204);
+    expect(await prisma.account.findUnique({ where: { id: temporaryAccountId } })).toBeNull();
     expect((await get(`${apiBase}/customers/12345678909`)).status).toBe(404);
     expect((await remove(`${apiBase}/customers/12345678909`)).status).toBe(404);
   });
@@ -347,10 +363,6 @@ describe('API bancária simulada', () => {
     expect(locked.status).toBe(423);
 
     serviceSessionBId = await openSession('11144477735', '847291');
-    ({ id: accountB1Id, number: accountB1Number } = await openAccount(
-      serviceSessionBId,
-      'CHECKING',
-    ));
     ({ number: accountB2Number } = await openAccount(serviceSessionBId, 'SAVINGS'));
     const createPix = await post(
       `${apiBase}/customer-service/pix-keys`,
@@ -433,10 +445,6 @@ describe('API bancária simulada', () => {
       .set('Authorization', `Bearer ${otherToken}`)
       .set('X-Service-Session-Id', serviceSessionAId);
     expect(otherOperatorSessionUse.status).toBe(403);
-    ({ id: accountA1Id, number: accountA1Number } = await openAccount(
-      serviceSessionAId,
-      'CHECKING',
-    ));
     ({ id: accountA2Id, number: accountA2Number } = await openAccount(
       serviceSessionAId,
       'SAVINGS',
@@ -1050,6 +1058,29 @@ describe('API bancária simulada', () => {
       (await prisma.user.findUniqueOrThrow({ where: { email: 'operator@example.test' } })).id,
     );
     expect(transaction.serviceSessionId).toBe(serviceSessionAId);
+
+    const createReceiver = await post(`${apiBase}/customers`, {
+      name: 'Cliente que só recebeu TED',
+      cpf: '39053344705',
+      customerPassword: '518372',
+    });
+    expect(createReceiver.status).toBe(201);
+    const receiverTed = await post(
+      `${apiBase}/customer-service/transactions/transfers`,
+      {
+        transferType: 'TED',
+        sourceAccountNumber: accountA1Number,
+        destinationAgency: '0001',
+        destinationAccountNumber: createReceiver.body.accounts[0].number,
+        amountCents: '100',
+      },
+      serviceSessionAId,
+      randomUUID(),
+    );
+    expect(receiverTed.status).toBe(201);
+    const receiverDelete = await remove(`${apiBase}/customers/39053344705`);
+    expect(receiverDelete.status).toBe(409);
+    expect(receiverDelete.body.error.code).toBe('CUSTOMER_HAS_HISTORY');
 
     expect((await patch(`${apiBase}/service-sessions/${serviceSessionAId}/close`, {})).status).toBe(
       200,

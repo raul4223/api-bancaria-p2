@@ -26,20 +26,19 @@ Use o admin local configurado no `.env` em `POST /api/v1/auth/login` e copie `ac
 | A       | `52998224725` | `291847`                      | `a@example.test` |
 | B       | `11144477735` | `847291`                      | `b@example.test` |
 
-Cadastre os dois em `POST /api/v1/customers`. Senhas têm seis dígitos e não podem ser repetidas ou sequenciais.
+Cadastre os dois em `POST /api/v1/customers`. Senhas têm seis dígitos e não podem ser repetidas ou sequenciais. **O cadastro já abre a conta corrente de cada cliente**: guarde o `number` de `accounts[0]` da resposta como `A1` (cliente A) e `B1` (cliente B). Mostre também a listagem `GET /api/v1/customers`, com CPF mascarado e a agência/número de cada conta.
 
 ## 3. Atendimento de B
 
 1. Abra `POST /api/v1/service-sessions` com CPF e senha de B. Guarde `id` da resposta.
 2. No Swagger, informe esse ID em `serviceSession` (`X-Service-Session-Id`).
-3. Abra conta corrente em `POST /api/v1/customer-service/accounts` com `{"type":"CHECKING"}`. Guarde o **número da conta** (`number`, 7 dígitos) como `B1`.
-4. Cadastre uma chave `EMAIL` em `POST /api/v1/customer-service/pix-keys`, vinculada a `B1`, com `b@example.test`.
-5. Feche o atendimento em `PATCH /api/v1/service-sessions/{serviceSessionId}/close`.
+3. Cadastre uma chave `EMAIL` em `POST /api/v1/customer-service/pix-keys`, vinculada a `B1`, com `b@example.test`.
+4. Feche o atendimento em `PATCH /api/v1/service-sessions/{serviceSessionId}/close`.
 
 ## 4. Atendimento de A e cadastro do favorecido
 
 1. Abra atendimento para A e configure o novo `id` em `serviceSession`.
-2. Abra `CHECKING` e `SAVINGS`; guarde os **números das contas** como `A1` e `A2`. Todas as operações usam o número da conta (agência fixa `0001`).
+2. Abra a poupança adicional em `POST /api/v1/customer-service/accounts` com `{"type":"SAVINGS"}`; guarde o número como `A2`. Todas as operações usam o número da conta (agência fixa `0001`).
 3. Cadastre B como favorecido TED, usando agência `0001` e o número de `B1`.
 
 ## 5. Cenário financeiro

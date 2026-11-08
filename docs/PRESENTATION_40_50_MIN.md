@@ -32,7 +32,7 @@ Fala importante: esta é uma simulação acadêmica. Não existe integração co
 ## Bloco 3 — Swagger e cadastros (12 min)
 
 1. **Login (1 min; ao vivo):** autenticar no `/docs` com o admin de demonstração e usar `bearerAuth`.
-2. **CRUD Clientes (2 min; ao vivo):** mostrar listagem com CPF mascarado, detalhe, alteração e exclusão de cadastro sem histórico; explicar o 409 quando existe histórico.
+2. **CRUD Clientes (2 min; ao vivo):** mostrar o cadastro abrindo automaticamente a primeira conta (agência e número), listagem com CPF mascarado e contas, busca pelo CPF, alteração e exclusão de cadastro sem histórico; explicar o 409 quando existe histórico.
 3. **Atendimento (2 min; ao vivo):** abrir com senha correta; mostrar erro genérico para senha errada; explicar bloqueio após cinco falhas e fechamento automático do atendimento anterior.
 4. **CRUD Chaves Pix (3 min; ao vivo):** criar chave RANDOM, listar, consultar, mover entre contas do mesmo cliente, consultar de novo e excluir.
 5. **CRUD Favorecidos (3 min; ao vivo):** criar destino TED, listar, consultar, atualizar apelido e excluir; mostrar que destino próprio ou inexistente é recusado.

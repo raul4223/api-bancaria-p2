@@ -29,15 +29,12 @@ export const errorMiddleware: ErrorRequestHandler = (error: unknown, _req, res, 
         : error.code === 'P2025'
           ? 'NOT_FOUND'
           : 'DATABASE_ERROR';
-    res
-      .status(status)
-      .json({
-        error: {
-          code,
-          message:
-            status === 500 ? 'Erro interno do servidor.' : 'Registro inválido ou inexistente.',
-        },
-      });
+    res.status(status).json({
+      error: {
+        code,
+        message: status === 500 ? 'Erro interno do servidor.' : 'Registro inválido ou inexistente.',
+      },
+    });
     return;
   }
 

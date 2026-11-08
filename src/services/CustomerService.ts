@@ -1,32 +1,53 @@
 import { Prisma } from '../generated/prisma/client.ts';
+import { prisma } from '../database/prisma.js';
 import { appErrors } from '../errors/appErrors.js';
 import { CustomerRepository } from '../repositories/CustomerRepository.js';
+import { AccountService } from './AccountService.js';
 import { hashPassword } from '../utils/password.js';
 import { maskCpf } from '../utils/mask.js';
 import { omitPasswordHash } from '../utils/presenters.js';
 
 // Service com regras de cadastro, consulta e manutenção de clientes
 export class CustomerService {
-  // Receber o repository de clientes
-  constructor(private readonly customerRepository: CustomerRepository) {}
+  // Receber o repository de clientes e o service que abre contas
+  constructor(
+    private readonly customerRepository: CustomerRepository,
+    private readonly accountService: AccountService,
+  ) {}
 
-  // Criar cliente com CPF validado e senha protegida
+  // Cadastrar cliente e abrir sua primeira conta numa única transação
   async create(input: {
     name: string;
     cpf: string;
     email?: string | undefined;
     phone?: string | undefined;
     customerPassword: string;
+    accountType: 'CHECKING' | 'SAVINGS';
   }) {
+    const passwordHash = await hashPassword(input.customerPassword);
     try {
-      const customer = await this.customerRepository.create({
-        name: input.name,
-        cpf: input.cpf,
-        ...(input.email !== undefined ? { email: input.email.toLowerCase() } : {}),
-        ...(input.phone !== undefined ? { phone: input.phone } : {}),
-        passwordHash: await hashPassword(input.customerPassword),
+      const { customer, account } = await prisma.$transaction(async (tx) => {
+        const customer = await this.customerRepository.create(
+          {
+            name: input.name,
+            cpf: input.cpf,
+            ...(input.email !== undefined ? { email: input.email.toLowerCase() } : {}),
+            ...(input.phone !== undefined ? { phone: input.phone } : {}),
+            passwordHash,
+          },
+          tx,
+        );
+        const account = await this.accountService.createForCustomer(
+          customer.id,
+          input.accountType,
+          tx,
+        );
+        return { customer, account };
       });
-      return omitPasswordHash(customer);
+      return {
+        ...omitPasswordHash(customer),
+        accounts: [{ ...account, balanceCents: account.balanceCents.toString() }],
+      };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
         throw appErrors.duplicateCustomer();
@@ -119,10 +140,16 @@ export class CustomerService {
     }
   }
 
-  // Excluir fisicamente apenas clientes sem contas ou atendimentos
+  // Excluir cadastro feito por engano: sem atendimentos, movimentações nem saldo
   async delete(cpf: string): Promise<void> {
     const { id: customerId } = await this.findByCpfOrFail(cpf);
-    if (await this.customerRepository.hasHistory(customerId)) throw appErrors.customerHasHistory();
+    const history = await this.customerRepository.getHistorySummary(customerId);
+    const hasHistory =
+      history.sessionCount > 0 ||
+      history.transactionCount > 0 ||
+      history.ledgerEntryCount > 0 ||
+      history.accountsWithBalance > 0;
+    if (hasHistory) throw appErrors.customerHasHistory();
     await this.customerRepository.delete(customerId);
   }
 }

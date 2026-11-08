@@ -139,9 +139,9 @@ registerRoute({
   method: 'post',
   path: '/customers',
   tag: 'Clientes',
-  summary: 'Cadastrar cliente',
+  summary: 'Cadastrar cliente e abrir a primeira conta',
   description:
-    'Cadastra um cliente com nome, CPF, contato e a senha de atendimento de 6 dígitos escolhida pelo cliente. Não abre conta: a conta é aberta depois, dentro de um atendimento.',
+    'Cadastra o cliente (nome, CPF, contato e senha de atendimento de 6 dígitos escolhida por ele) e **abre automaticamente a primeira conta**, na mesma transação. A conta é corrente por padrão; envie `accountType: "SAVINGS"` para poupança. A resposta traz a agência `0001` e o número da conta gerado pelo banco.',
   operationType: 'geral',
   body: createCustomerSchema,
   successCode: 201,
@@ -183,7 +183,7 @@ registerRoute({
   tag: 'Clientes',
   summary: 'Excluir cadastro sem histórico',
   description:
-    'Exclui fisicamente um cadastro feito por engano. Só é permitido para cliente **sem contas e sem atendimentos**; caso contrário devolve 409 `CUSTOMER_HAS_HISTORY`.',
+    'Exclui fisicamente um cadastro feito por engano, junto com a conta aberta no cadastro. Só é permitido quando o cliente **não teve atendimentos, a conta nunca foi movimentada e o saldo é zero**; caso contrário devolve 409 `CUSTOMER_HAS_HISTORY`, preservando o histórico financeiro.',
   operationType: 'geral',
   params: customerCpfParamsSchema,
   successCode: 204,
@@ -214,9 +214,9 @@ registerRoute({
   method: 'post',
   path: '/customer-service/accounts',
   tag: 'Contas do cliente (atendimento)',
-  summary: 'Abrir nova conta para o cliente atendido',
+  summary: 'Abrir conta adicional para o cliente atendido',
   description:
-    '**Cria uma conta nova** (corrente `CHECKING` ou poupança `SAVINGS`) para o cliente do atendimento, com saldo zero. O banco gera o número da conta (7 dígitos) na agência 0001.',
+    '**Abre uma conta adicional** (corrente `CHECKING` ou poupança `SAVINGS`) para o cliente do atendimento, com saldo zero; por exemplo, a poupança de quem já tem corrente. A primeira conta já é aberta no cadastro do cliente. O banco gera o número (7 dígitos) na agência 0001.',
   operationType: 'atendimento',
   body: openAccountSchema,
   sessionHeader: true,

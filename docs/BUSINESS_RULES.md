@@ -13,6 +13,8 @@ Este projeto é uma simulação acadêmica. Nenhum fluxo acessa bancos, o Banco 
 
 ## Identificação de clientes e contas
 
+- Exclusão de cliente (`DELETE /api/v1/customers/{cpf}`) serve só para cadastro feito por engano: remove o cliente e a conta aberta no cadastro quando ele **nunca teve atendimento, nenhuma conta foi movimentada (nem recebendo transferências) e todos os saldos são zero**. Com qualquer histórico a API devolve 409 `CUSTOMER_HAS_HISTORY`, preservando ledger e auditoria.
+
 - No balcão, o funcionário identifica o cliente pelo **CPF** do documento, não por um código interno. Por isso o CRUD de clientes usa o CPF na rota: `GET`, `PATCH` e `DELETE /api/v1/customers/{cpf}`. O UUID continua como chave interna no banco e nas relações (contas, atendimentos), mas não é exigido nas rotas.
 - A listagem geral mostra o CPF mascarado (`***.982.247-**`) e, para cada cliente, a agência e o número de cada conta, o tipo e o status. O CPF completo aparece só na consulta individual, para o operador conferir com o documento.
 - Toda conta de cliente tem **agência `0001` e um número de 7 dígitos** gerado pelo banco. Depósito, saque, transferência (`sourceAccountNumber` e, na INTERNAL, `destinationAccountNumber`), extrato, consulta de conta, bloqueio e chaves Pix identificam a conta pelo número. A TED informa agência e número de destino.
@@ -20,7 +22,8 @@ Este projeto é uma simulação acadêmica. Nenhum fluxo acessa bancos, o Banco 
 
 ## Contas e movimentações
 
-- O atendimento pode abrir contas `CHECKING` ou `SAVINGS`, com saldo zero. A agência fictícia é `0001`; o número é gerado pelo servidor.
+- **O cadastro do cliente já abre a primeira conta**, na mesma transação: corrente (`CHECKING`) por padrão, ou poupança (`SAVINGS`) com `accountType`. Assim, como num banco real, o cliente sai do cadastro com agência e número de conta. Cliente e conta continuam em tabelas separadas, porque uma pessoa pode ter várias contas.
+- Contas adicionais são abertas dentro de um atendimento (`POST /api/v1/customer-service/accounts`), com saldo zero. A agência fictícia é `0001`; o número (7 dígitos) é gerado pelo servidor.
 - A conta `SYSTEM` é criada pelo seed, não aparece nos endpoints de atendimento e funciona como contrapartida de espécie e tarifa. Ela pode ficar negativa.
 - Contas de clientes não podem ter saldo negativo. Depósito, saque e transferência usam `bigint` em centavos; o débito é um `UPDATE` condicional no banco (`status = ACTIVE` e saldo suficiente). Não se calcula nem se grava um saldo novo a partir de uma leitura em memória.
 - Depósito: débito na SYSTEM e crédito na conta do cliente. Saque: débito no cliente e crédito na SYSTEM.

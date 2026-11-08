@@ -10,11 +10,9 @@ const createLimiter = (windowMs: number, limit: number) =>
     legacyHeaders: false,
     skip: () => env.nodeEnv === 'test',
     handler: (_req, res) => {
-      res
-        .status(429)
-        .json({
-          error: { code: 'RATE_LIMITED', message: 'Muitas tentativas. Aguarde e tente novamente.' },
-        });
+      res.status(429).json({
+        error: { code: 'RATE_LIMITED', message: 'Muitas tentativas. Aguarde e tente novamente.' },
+      });
     },
   });
 

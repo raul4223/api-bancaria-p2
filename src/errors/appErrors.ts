@@ -16,7 +16,11 @@ export const appErrors = {
     new AppError(404, 'NOT_FOUND', `${resource} não encontrado.`),
   duplicateCustomer: () => new AppError(409, 'DUPLICATE_CUSTOMER', 'CPF ou e-mail já cadastrado.'),
   customerHasHistory: () =>
-    new AppError(409, 'CUSTOMER_HAS_HISTORY', 'Cliente com histórico não pode ser excluído.'),
+    new AppError(
+      409,
+      'CUSTOMER_HAS_HISTORY',
+      'Cliente com atendimentos, movimentações ou saldo não pode ser excluído.',
+    ),
   weakCustomerPassword: () =>
     new AppError(422, 'WEAK_CUSTOMER_PASSWORD', 'Senha de atendimento fraca.'),
   insufficientFunds: () =>
