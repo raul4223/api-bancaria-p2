@@ -9,7 +9,11 @@ export function isWeakCustomerPassword(value: string): boolean {
   if (/^(\d)\1{5}$/.test(value)) return true;
 
   const digits = [...value].map(Number);
-  const isIncreasing = digits.every((digit, index) => index === 0 || digit === digits[index - 1]! + 1);
-  const isDecreasing = digits.every((digit, index) => index === 0 || digit === digits[index - 1]! - 1);
+  const isIncreasing = digits.every(
+    (digit, index) => index === 0 || digit === digits[index - 1]! + 1,
+  );
+  const isDecreasing = digits.every(
+    (digit, index) => index === 0 || digit === digits[index - 1]! - 1,
+  );
   return isIncreasing || isDecreasing;
 }

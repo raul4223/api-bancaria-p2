@@ -26,7 +26,9 @@ const healthHandler = async (_req: Request, res: Response) => {
 export const app = express();
 app.disable('x-powered-by');
 app.use(helmet());
-app.use(cors({ origin: env.corsOrigin.split(',').map((origin) => origin.trim()), credentials: false }));
+app.use(
+  cors({ origin: env.corsOrigin.split(',').map((origin) => origin.trim()), credentials: false }),
+);
 app.use(express.json({ limit: '100kb' }));
 app.get('/health', healthHandler);
 app.get('/openapi.json', (_req, res) => res.status(200).json(openApiDocument));

@@ -9,7 +9,10 @@ export function getBankDate(date: Date, timeZone: string): { weekday: number; ti
   }).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  return { weekday: weekdays.indexOf(values.weekday ?? ''), time: `${values.hour}:${values.minute}` };
+  return {
+    weekday: weekdays.indexOf(values.weekday ?? ''),
+    time: `${values.hour}:${values.minute}`,
+  };
 }
 
 // Conferir se o dia local é de segunda a sexta-feira
@@ -25,8 +28,15 @@ export function isWithinTimeRange(time: string, start: string, end: string): boo
 }
 
 // Conferir se a data está dentro do horário útil do banco
-export function isWithinBusinessHours(date: Date, timeZone: string, start: string, end: string): boolean {
-  return isBusinessDay(date, timeZone) && isWithinTimeRange(getBankDate(date, timeZone).time, start, end);
+export function isWithinBusinessHours(
+  date: Date,
+  timeZone: string,
+  start: string,
+  end: string,
+): boolean {
+  return (
+    isBusinessDay(date, timeZone) && isWithinTimeRange(getBankDate(date, timeZone).time, start, end)
+  );
 }
 
 // Conferir se a data pertence ao período noturno configurado

@@ -18,7 +18,10 @@ export class ServiceSessionRepository {
 
   // Buscar atendimento válido por ID e operador
   findByIdForOperator(id: string, operatorUserId: string) {
-    return prisma.serviceSession.findFirst({ where: { id, operatorUserId }, include: { customer: true } });
+    return prisma.serviceSession.findFirst({
+      where: { id, operatorUserId },
+      include: { customer: true },
+    });
   }
 
   // Fechar atendimento que pertence ao operador autenticado
@@ -31,11 +34,18 @@ export class ServiceSessionRepository {
 
   // Gravar expiração de atendimento após seu prazo
   expire(id: string) {
-    return prisma.serviceSession.updateMany({ where: { id, status: 'OPEN' }, data: { status: 'EXPIRED' } });
+    return prisma.serviceSession.updateMany({
+      where: { id, status: 'OPEN' },
+      data: { status: 'EXPIRED' },
+    });
   }
 
   // Acrescentar tentativa inválida e aplicar bloqueio temporário
-  async incrementFailedAttempts(customerId: string, maxAttempts: number, lockMinutes: number): Promise<number> {
+  async incrementFailedAttempts(
+    customerId: string,
+    maxAttempts: number,
+    lockMinutes: number,
+  ): Promise<number> {
     return prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
       const nextAttempts = customer.failedPasswordAttempts + 1;
@@ -43,7 +53,8 @@ export class ServiceSessionRepository {
         where: { id: customerId },
         data: {
           failedPasswordAttempts: nextAttempts,
-          passwordLockedUntil: nextAttempts >= maxAttempts ? new Date(Date.now() + lockMinutes * 60_000) : null,
+          passwordLockedUntil:
+            nextAttempts >= maxAttempts ? new Date(Date.now() + lockMinutes * 60_000) : null,
         },
       });
       return nextAttempts;
@@ -52,6 +63,9 @@ export class ServiceSessionRepository {
 
   // Zerar tentativas inválidas depois de uma senha correta
   resetFailedAttempts(customerId: string) {
-    return prisma.customer.update({ where: { id: customerId }, data: { failedPasswordAttempts: 0, passwordLockedUntil: null } });
+    return prisma.customer.update({
+      where: { id: customerId },
+      data: { failedPasswordAttempts: 0, passwordLockedUntil: null },
+    });
   }
 }

@@ -60,7 +60,7 @@ export class TransactionController {
   getStatement = async (req: Request, res: Response) => {
     const result = await this.transactionService.getStatement(
       req.validatedQuery as z.infer<typeof statementQuerySchema>,
-      req.params.accountId as string,
+      req.params.accountNumber as string,
       req.serviceSession!.customerId,
     );
     res.status(200).json(result);

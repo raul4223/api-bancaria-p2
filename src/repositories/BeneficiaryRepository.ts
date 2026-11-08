@@ -10,7 +10,12 @@ export class BeneficiaryRepository {
 
   // Listar favorecidos paginados do cliente atendido
   findMany(customerId: string, skip: number, take: number) {
-    return prisma.beneficiary.findMany({ where: { customerId }, orderBy: { createdAt: 'desc' }, skip, take });
+    return prisma.beneficiary.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    });
   }
 
   // Contar favorecidos do cliente para paginação

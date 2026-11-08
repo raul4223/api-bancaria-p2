@@ -10,13 +10,19 @@ export class ServiceSessionController {
 
   // Abrir atendimento depois da senha do cliente ser confirmada
   open = async (req: Request, res: Response) => {
-    const result = await this.serviceSessionService.open(req.body as z.infer<typeof openServiceSessionSchema>, req.auth!.operatorUserId);
+    const result = await this.serviceSessionService.open(
+      req.body as z.infer<typeof openServiceSessionSchema>,
+      req.auth!.operatorUserId,
+    );
     res.status(201).json(result);
   };
 
   // Encerrar atendimento aberto pelo operador autenticado
   close = async (req: Request, res: Response) => {
-    const result = await this.serviceSessionService.close(req.params.serviceSessionId as string, req.auth!.operatorUserId);
+    const result = await this.serviceSessionService.close(
+      req.params.serviceSessionId as string,
+      req.auth!.operatorUserId,
+    );
     res.status(200).json(result);
   };
 }

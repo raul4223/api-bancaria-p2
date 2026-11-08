@@ -8,6 +8,8 @@ export function createClock(initialTime: Date): Clock & { set: (value: Date) => 
   let currentTime = new Date(initialTime);
   return {
     now: () => new Date(currentTime),
-    set: (value) => { currentTime = new Date(value); },
+    set: (value) => {
+      currentTime = new Date(value);
+    },
   };
 }

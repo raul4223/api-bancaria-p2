@@ -11,7 +11,7 @@ import {
   updateBeneficiarySchema,
 } from '../schemas/beneficiary.schemas.js';
 import {
-  accountIdParamsSchema,
+  accountNumberParamsSchema,
   idempotencyHeaderSchema,
   recordIdParamsSchema,
 } from '../schemas/common.schemas.js';
@@ -49,13 +49,13 @@ customerServiceRoutes.get(
   container.accountController.list,
 );
 customerServiceRoutes.get(
-  '/accounts/:accountId',
-  validate({ params: accountIdParamsSchema }),
-  container.accountController.getById,
+  '/accounts/:accountNumber',
+  validate({ params: accountNumberParamsSchema }),
+  container.accountController.getByNumber,
 );
 customerServiceRoutes.get(
-  '/accounts/:accountId/statement',
-  validate({ params: accountIdParamsSchema, query: statementQuerySchema }),
+  '/accounts/:accountNumber/statement',
+  validate({ params: accountNumberParamsSchema, query: statementQuerySchema }),
   container.transactionController.getStatement,
 );
 

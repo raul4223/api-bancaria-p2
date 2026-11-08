@@ -8,8 +8,8 @@ import {
 } from '../schemas/customer.schemas.js';
 import { openServiceSessionSchema } from '../schemas/service-session.schemas.js';
 import {
-  accountIdParamsSchema,
-  customerIdParamsSchema,
+  accountNumberParamsSchema,
+  customerCpfParamsSchema,
   idempotencyHeaderSchema,
   recordIdParamsSchema,
   sessionIdParamsSchema,
@@ -67,12 +67,20 @@ registry.registerComponent('securitySchemes', 'serviceSession', {
   name: 'X-Service-Session-Id',
 });
 
+const operationTypeLabels = {
+  público: 'pública, sem autenticação',
+  geral: 'geral, exige apenas o JWT do administrador (bearerAuth)',
+  atendimento:
+    'em nome do cliente, exige o JWT (bearerAuth) e um atendimento aberto (serviceSession); o cliente é sempre o do atendimento',
+};
+
 // Registrar operação OpenAPI com schema de entrada e camada de autorização
 function registerRoute(definition: {
   method: 'get' | 'post' | 'patch' | 'delete';
   path: string;
   tag: string;
   summary: string;
+  description: string;
   operationType: 'geral' | 'atendimento' | 'público';
   body?: z.ZodType;
   params?: z.ZodObject;
@@ -104,7 +112,7 @@ function registerRoute(definition: {
     path: `/api/v1${definition.path}`,
     tags: [definition.tag],
     summary: definition.summary,
-    description: `Tipo de operação: ${definition.operationType}.`,
+    description: `${definition.description}\n\n**Tipo de operação:** ${operationTypeLabels[definition.operationType]}.`,
     ...(security ? { security } : {}),
     ...(Object.keys(request).length > 0 ? { request } : {}),
     responses: {
@@ -122,6 +130,8 @@ registerRoute({
   path: '/auth/login',
   tag: 'Autenticação',
   summary: 'Autenticar operador master',
+  description:
+    'Recebe e-mail e senha do administrador master e devolve o `accessToken` (JWT, válido por 60 minutos). Cole o token em **Authorize → bearerAuth**.',
   operationType: 'público',
   body: loginSchema,
 });
@@ -130,6 +140,8 @@ registerRoute({
   path: '/customers',
   tag: 'Clientes',
   summary: 'Cadastrar cliente',
+  description:
+    'Cadastra um cliente com nome, CPF, contato e a senha de atendimento de 6 dígitos escolhida pelo cliente. Não abre conta: a conta é aberta depois, dentro de um atendimento.',
   operationType: 'geral',
   body: createCustomerSchema,
   successCode: 201,
@@ -139,33 +151,41 @@ registerRoute({
   path: '/customers',
   tag: 'Clientes',
   summary: 'Listar clientes com CPF mascarado',
+  description:
+    'Lista **todos os clientes do banco**, paginado. O CPF aparece mascarado; cada cliente mostra suas contas (agência, número, tipo e status), a quantidade de contas e o saldo total. Filtros: `search` (nome ou e-mail) e `cpf` (busca exata).',
   operationType: 'geral',
   query: listCustomersSchema,
 });
 registerRoute({
   method: 'get',
-  path: '/customers/{customerId}',
+  path: '/customers/{cpf}',
   tag: 'Clientes',
-  summary: 'Consultar cliente por ID',
+  summary: 'Consultar cliente pelo CPF',
+  description:
+    'Busca um cliente pelo **CPF** (o documento que ele apresenta na agência) e devolve os dados completos e todas as contas com saldo. Use para conferir o cadastro antes de abrir o atendimento.',
   operationType: 'geral',
-  params: customerIdParamsSchema,
+  params: customerCpfParamsSchema,
 });
 registerRoute({
   method: 'patch',
-  path: '/customers/{customerId}',
+  path: '/customers/{cpf}',
   tag: 'Clientes',
   summary: 'Atualizar dados de contato',
+  description:
+    'Atualiza nome, e-mail e telefone do cliente identificado pelo CPF. CPF e senha de atendimento não podem ser alterados.',
   operationType: 'geral',
-  params: customerIdParamsSchema,
+  params: customerCpfParamsSchema,
   body: updateCustomerSchema,
 });
 registerRoute({
   method: 'delete',
-  path: '/customers/{customerId}',
+  path: '/customers/{cpf}',
   tag: 'Clientes',
   summary: 'Excluir cadastro sem histórico',
+  description:
+    'Exclui fisicamente um cadastro feito por engano. Só é permitido para cliente **sem contas e sem atendimentos**; caso contrário devolve 409 `CUSTOMER_HAS_HISTORY`.',
   operationType: 'geral',
-  params: customerIdParamsSchema,
+  params: customerCpfParamsSchema,
   successCode: 204,
   noContent: true,
 });
@@ -174,6 +194,8 @@ registerRoute({
   path: '/service-sessions',
   tag: 'Atendimento',
   summary: 'Abrir atendimento com senha do cliente',
+  description:
+    'Abre o atendimento na bancada: o cliente informa CPF e a própria senha de atendimento. Devolve o `id` do atendimento, que deve ser colado em **Authorize → serviceSession**. Senha errada 5 vezes seguidas bloqueia a senha por 15 minutos (423).',
   operationType: 'geral',
   body: openServiceSessionSchema,
   successCode: 201,
@@ -183,14 +205,18 @@ registerRoute({
   path: '/service-sessions/{serviceSessionId}/close',
   tag: 'Atendimento',
   summary: 'Fechar atendimento',
+  description:
+    'Encerra o atendimento. Depois disso, nenhuma operação em nome do cliente é aceita com esse ID (403).',
   operationType: 'geral',
   params: sessionIdParamsSchema,
 });
 registerRoute({
   method: 'post',
   path: '/customer-service/accounts',
-  tag: 'Contas',
-  summary: 'Abrir conta do cliente atendido',
+  tag: 'Contas do cliente (atendimento)',
+  summary: 'Abrir nova conta para o cliente atendido',
+  description:
+    '**Cria uma conta nova** (corrente `CHECKING` ou poupança `SAVINGS`) para o cliente do atendimento, com saldo zero. O banco gera o número da conta (7 dígitos) na agência 0001.',
   operationType: 'atendimento',
   body: openAccountSchema,
   sessionHeader: true,
@@ -199,28 +225,34 @@ registerRoute({
 registerRoute({
   method: 'get',
   path: '/customer-service/accounts',
-  tag: 'Contas',
-  summary: 'Listar contas do cliente atendido',
+  tag: 'Contas do cliente (atendimento)',
+  summary: 'Listar todas as contas do cliente atendido',
+  description:
+    '**Lista todas as contas** do cliente do atendimento, com número, tipo, status e saldo. Use para descobrir o número de cada conta.',
   operationType: 'atendimento',
   query: listAccountsSchema,
   sessionHeader: true,
 });
 registerRoute({
   method: 'get',
-  path: '/customer-service/accounts/{accountId}',
-  tag: 'Contas',
-  summary: 'Consultar conta do cliente atendido',
+  path: '/customer-service/accounts/{accountNumber}',
+  tag: 'Contas do cliente (atendimento)',
+  summary: 'Consultar uma conta do cliente atendido pelo número',
+  description:
+    '**Consulta uma única conta** pelo número, com saldo e status. Só encontra contas do cliente do atendimento; conta de outro cliente devolve 404.',
   operationType: 'atendimento',
-  params: accountIdParamsSchema,
+  params: accountNumberParamsSchema,
   sessionHeader: true,
 });
 registerRoute({
   method: 'patch',
-  path: '/accounts/{accountId}/status',
-  tag: 'Contas',
-  summary: 'Bloquear ou desbloquear conta',
+  path: '/accounts/{accountNumber}/status',
+  tag: 'Gestão de contas (geral)',
+  summary: 'Bloquear ou desbloquear conta pelo número',
+  description:
+    '**Gestão do banco (não depende de atendimento):** bloqueia a conta (`{ "status": "BLOCKED", "reason": "..." }`) ou desbloqueia (`{ "status": "ACTIVE" }`). Conta bloqueada não envia nem recebe dinheiro. Usado, por exemplo, em suspeita de fraude.',
   operationType: 'geral',
-  params: accountIdParamsSchema,
+  params: accountNumberParamsSchema,
   body: updateAccountStatusSchema,
 });
 registerRoute({
@@ -228,6 +260,8 @@ registerRoute({
   path: '/ledger/reconciliation',
   tag: 'Ledger',
   summary: 'Conciliar saldos e lançamentos',
+  description:
+    'Confere a contabilidade do banco: total de débitos = total de créditos, saldo de cada conta = soma dos seus lançamentos e soma de todos os saldos = 0. Devolve `balanced: true` quando tudo confere.',
   operationType: 'geral',
 });
 registerRoute({
@@ -235,6 +269,8 @@ registerRoute({
   path: '/customer-service/transactions/deposits',
   tag: 'Movimentações',
   summary: 'Depositar em conta do cliente',
+  description:
+    'Deposita dinheiro em espécie entregue pelo cliente na bancada, numa conta dele (pelo número). Exige `Idempotency-Key` (UUID) para não duplicar se a requisição for repetida.',
   operationType: 'atendimento',
   body: depositSchema,
   sessionHeader: true,
@@ -246,6 +282,8 @@ registerRoute({
   path: '/customer-service/transactions/withdrawals',
   tag: 'Movimentações',
   summary: 'Sacar de conta do cliente',
+  description:
+    'Saca dinheiro em espécie de uma conta do cliente (pelo número). Recusa saldo insuficiente. Exige `Idempotency-Key`.',
   operationType: 'atendimento',
   body: withdrawalSchema,
   sessionHeader: true,
@@ -257,6 +295,8 @@ registerRoute({
   path: '/customer-service/transactions/transfers',
   tag: 'Movimentações',
   summary: 'Transferir por PIX, TED ou entre contas do mesmo titular',
+  description:
+    '**Endpoint complexo.** Transfere a partir de uma conta do cliente (`sourceAccountNumber`):\n- `PIX`: destino pela chave Pix; grátis; limite noturno de R$ 1.000 entre 20h e 6h.\n- `TED`: destino por agência + número da conta; tarifa de R$ 5; só em dias úteis, das 06:30 às 17:00.\n- `INTERNAL`: entre duas contas do mesmo cliente (`destinationAccountNumber`); grátis.\n\nTudo acontece numa única transação, com ledger de partidas dobradas e `Idempotency-Key`.',
   operationType: 'atendimento',
   body: transferSchema,
   sessionHeader: true,
@@ -265,11 +305,13 @@ registerRoute({
 });
 registerRoute({
   method: 'get',
-  path: '/customer-service/accounts/{accountId}/statement',
+  path: '/customer-service/accounts/{accountNumber}/statement',
   tag: 'Movimentações',
   summary: 'Consultar extrato paginado da conta',
+  description:
+    'Extrato paginado de uma conta do cliente (pelo número), do mais recente para o mais antigo, com filtros de período, tipo e tipo de transferência. Mostra a contraparte mascarada e o operador que executou cada operação.',
   operationType: 'atendimento',
-  params: accountIdParamsSchema,
+  params: accountNumberParamsSchema,
   query: statementQuerySchema,
   sessionHeader: true,
 });
@@ -278,6 +320,8 @@ registerRoute({
   path: '/customer-service/pix-keys',
   tag: 'Chaves Pix',
   summary: 'Cadastrar chave Pix',
+  description:
+    'Cadastra uma chave Pix (CPF, e-mail, telefone ou aleatória) ligada a uma conta do cliente, informada pelo número. Máximo de 5 chaves por conta.',
   operationType: 'atendimento',
   body: createPixKeySchema,
   sessionHeader: true,
@@ -288,6 +332,7 @@ registerRoute({
   path: '/customer-service/pix-keys',
   tag: 'Chaves Pix',
   summary: 'Listar chaves Pix',
+  description: 'Lista as chaves Pix do cliente do atendimento.',
   operationType: 'atendimento',
   query: listPixKeysSchema,
   sessionHeader: true,
@@ -297,6 +342,7 @@ registerRoute({
   path: '/customer-service/pix-keys/{id}',
   tag: 'Chaves Pix',
   summary: 'Consultar chave Pix por ID',
+  description: 'Consulta uma chave Pix do cliente do atendimento pelo ID da chave.',
   operationType: 'atendimento',
   params: recordIdParamsSchema,
   sessionHeader: true,
@@ -306,6 +352,8 @@ registerRoute({
   path: '/customer-service/pix-keys/{id}',
   tag: 'Chaves Pix',
   summary: 'Mover chave Pix para outra conta do cliente',
+  description:
+    'Move a chave Pix para outra conta do mesmo cliente (`accountNumber`). Tipo e valor da chave não mudam.',
   operationType: 'atendimento',
   params: recordIdParamsSchema,
   body: updatePixKeySchema,
@@ -316,6 +364,7 @@ registerRoute({
   path: '/customer-service/pix-keys/{id}',
   tag: 'Chaves Pix',
   summary: 'Excluir chave Pix',
+  description: 'Exclui a chave Pix. Transferências antigas continuam registrando a chave usada.',
   operationType: 'atendimento',
   params: recordIdParamsSchema,
   sessionHeader: true,
@@ -327,6 +376,8 @@ registerRoute({
   path: '/customer-service/beneficiaries',
   tag: 'Favorecidos',
   summary: 'Cadastrar favorecido',
+  description:
+    'Salva um favorecido na agenda do cliente: PIX (chave) ou TED (agência + número da conta de destino). Salvar não autoriza transferência; a transferência valida tudo de novo.',
   operationType: 'atendimento',
   body: createBeneficiarySchema,
   sessionHeader: true,
@@ -337,6 +388,7 @@ registerRoute({
   path: '/customer-service/beneficiaries',
   tag: 'Favorecidos',
   summary: 'Listar favorecidos',
+  description: 'Lista os favorecidos do cliente do atendimento.',
   operationType: 'atendimento',
   query: listBeneficiariesSchema,
   sessionHeader: true,
@@ -346,6 +398,7 @@ registerRoute({
   path: '/customer-service/beneficiaries/{id}',
   tag: 'Favorecidos',
   summary: 'Consultar favorecido por ID',
+  description: 'Consulta um favorecido do cliente do atendimento pelo ID.',
   operationType: 'atendimento',
   params: recordIdParamsSchema,
   sessionHeader: true,
@@ -355,6 +408,7 @@ registerRoute({
   path: '/customer-service/beneficiaries/{id}',
   tag: 'Favorecidos',
   summary: 'Atualizar favorecido',
+  description: 'Atualiza apelido e dados de destino do favorecido, validando o destino de novo.',
   operationType: 'atendimento',
   params: recordIdParamsSchema,
   body: updateBeneficiarySchema,
@@ -365,6 +419,7 @@ registerRoute({
   path: '/customer-service/beneficiaries/{id}',
   tag: 'Favorecidos',
   summary: 'Excluir favorecido',
+  description: 'Exclui o favorecido. Não altera transferências já feitas.',
   operationType: 'atendimento',
   params: recordIdParamsSchema,
   sessionHeader: true,
@@ -418,7 +473,7 @@ if (transferOperation?.requestBody && 'content' in transferOperation.requestBody
           summary: 'Transferência Pix simulada',
           value: {
             transferType: 'PIX',
-            sourceAccountId: '11111111-1111-4111-8111-111111111111',
+            sourceAccountNumber: '1234567',
             amountCents: '3000',
             pixKey: 'cliente@example.test',
           },
@@ -427,7 +482,7 @@ if (transferOperation?.requestBody && 'content' in transferOperation.requestBody
           summary: 'Transferência TED simulada',
           value: {
             transferType: 'TED',
-            sourceAccountId: '11111111-1111-4111-8111-111111111111',
+            sourceAccountNumber: '1234567',
             amountCents: '2000',
             destinationAgency: '0001',
             destinationAccountNumber: '7654321',
@@ -437,8 +492,8 @@ if (transferOperation?.requestBody && 'content' in transferOperation.requestBody
           summary: 'Transferência entre contas do titular',
           value: {
             transferType: 'INTERNAL',
-            sourceAccountId: '11111111-1111-4111-8111-111111111111',
-            destinationAccountId: '22222222-2222-4222-8222-222222222222',
+            sourceAccountNumber: '1234567',
+            destinationAccountNumber: '2345678',
             amountCents: '1000',
           },
         },

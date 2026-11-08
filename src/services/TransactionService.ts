@@ -8,6 +8,7 @@ import { TransactionRepository } from '../repositories/TransactionRepository.js'
 import { createFingerprint } from '../utils/idempotency.js';
 import { parseCents } from '../utils/money.js';
 import { maskAccountNumber, maskName } from '../utils/mask.js';
+import { customerAgency } from '../utils/bankAccount.js';
 
 type OperationInput = {
   operatorUserId: string;
@@ -130,7 +131,7 @@ export class TransactionService {
 
   // Depositar valor e registrar as duas partidas correspondentes no ledger
   async deposit(
-    input: { accountId: string; amountCents: string; description?: string | undefined },
+    input: { accountNumber: string; amountCents: string; description?: string | undefined },
     context: {
       customerId: string;
       operatorUserId: string;
@@ -146,8 +147,9 @@ export class TransactionService {
       fingerprintPayload,
     );
     if (replay) return replay;
-    const account = await this.accountRepository.findByIdForCustomer(
-      input.accountId,
+    const account = await this.accountRepository.findByNumberForCustomer(
+      customerAgency,
+      input.accountNumber,
       context.customerId,
     );
     if (!account) throw appErrors.notFound('Conta');
@@ -198,7 +200,7 @@ export class TransactionService {
           type: 'DEPOSIT',
           amountCents: amountCents.toString(),
           feeCents: '0',
-          accountId: account.id,
+          account: { agency: account.agency, number: account.number },
           createdAt: transaction.createdAt.toISOString(),
         };
       },
@@ -207,7 +209,7 @@ export class TransactionService {
 
   // Sacar valor e registrar as duas partidas correspondentes no ledger
   async withdraw(
-    input: { accountId: string; amountCents: string; description?: string | undefined },
+    input: { accountNumber: string; amountCents: string; description?: string | undefined },
     context: {
       customerId: string;
       operatorUserId: string;
@@ -223,8 +225,9 @@ export class TransactionService {
       fingerprintPayload,
     );
     if (replay) return replay;
-    const account = await this.accountRepository.findByIdForCustomer(
-      input.accountId,
+    const account = await this.accountRepository.findByNumberForCustomer(
+      customerAgency,
+      input.accountNumber,
       context.customerId,
     );
     if (!account) throw appErrors.notFound('Conta');
@@ -275,7 +278,7 @@ export class TransactionService {
           type: 'WITHDRAWAL',
           amountCents: amountCents.toString(),
           feeCents: '0',
-          accountId: account.id,
+          account: { agency: account.agency, number: account.number },
           createdAt: transaction.createdAt.toISOString(),
         };
       },
@@ -292,11 +295,16 @@ export class TransactionService {
       type?: 'DEPOSIT' | 'WITHDRAWAL' | 'TRANSFER' | undefined;
       transferType?: 'PIX' | 'TED' | 'INTERNAL' | undefined;
     },
-    accountId: string,
+    accountNumber: string,
     customerId: string,
   ) {
-    const account = await this.accountRepository.findByIdForCustomer(accountId, customerId);
+    const account = await this.accountRepository.findByNumberForCustomer(
+      customerAgency,
+      accountNumber,
+      customerId,
+    );
     if (!account) throw appErrors.notFound('Conta');
+    const accountId = account.id;
     const filters = {
       accountId,
       skip: (input.page - 1) * input.pageSize,

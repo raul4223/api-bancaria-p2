@@ -3,7 +3,12 @@ import { parseCents, formatCents } from '../../src/utils/money.js';
 import { isValidCpf, normalizeCpf } from '../../src/utils/cpf.js';
 import { isCustomerPassword, isWeakCustomerPassword } from '../../src/utils/customerPassword.js';
 import { isValidPixEmail, isValidPixPhone, normalizePixKey } from '../../src/utils/pixKey.js';
-import { getBankDate, isBusinessDay, isNightTime, isWithinTimeRange } from '../../src/utils/bankTime.js';
+import {
+  getBankDate,
+  isBusinessDay,
+  isNightTime,
+  isWithinTimeRange,
+} from '../../src/utils/bankTime.js';
 import { maskAccountNumber, maskCpf, maskName } from '../../src/utils/mask.js';
 
 describe('utils de dinheiro', () => {
@@ -32,9 +37,12 @@ describe('senha de atendimento', () => {
     expect(isWeakCustomerPassword('291847')).toBe(false);
   });
 
-  it.each(['111111', '123456', '654321', '12345', 'abcdef'])('recusa senha fraca ou inválida: %s', (value) => {
-    expect(isWeakCustomerPassword(value)).toBe(true);
-  });
+  it.each(['111111', '123456', '654321', '12345', 'abcdef'])(
+    'recusa senha fraca ou inválida: %s',
+    (value) => {
+      expect(isWeakCustomerPassword(value)).toBe(true);
+    },
+  );
 });
 
 describe('chaves Pix', () => {
@@ -60,7 +68,9 @@ describe('horários bancários', () => {
     expect(isWithinTimeRange('23:00', '20:00', '06:00')).toBe(true);
     expect(isWithinTimeRange('05:59', '20:00', '06:00')).toBe(true);
     expect(isWithinTimeRange('12:00', '20:00', '06:00')).toBe(false);
-    expect(isNightTime(new Date('2026-11-10T02:30:00.000Z'), 'America/Sao_Paulo', '20:00', '06:00')).toBe(true);
+    expect(
+      isNightTime(new Date('2026-11-10T02:30:00.000Z'), 'America/Sao_Paulo', '20:00', '06:00'),
+    ).toBe(true);
   });
 });
 

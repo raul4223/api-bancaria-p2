@@ -21,7 +21,8 @@ export class ServiceSessionService {
     const customer = await this.customerRepository.findByCpf(input.cpf);
     if (!customer) throw appErrors.customerCredentials();
     const now = this.clock.now();
-    if (customer.passwordLockedUntil && customer.passwordLockedUntil > now) throw appErrors.customerLocked();
+    if (customer.passwordLockedUntil && customer.passwordLockedUntil > now)
+      throw appErrors.customerLocked();
 
     if (!(await verifyPassword(customer.passwordHash, input.customerPassword))) {
       const attempts = await this.sessionRepository.incrementFailedAttempts(
@@ -48,7 +49,10 @@ export class ServiceSessionService {
 
   // Fechar atendimento aberto que pertence ao operador autenticado
   async close(serviceSessionId: string, operatorUserId: string) {
-    const session = await this.sessionRepository.findByIdForOperator(serviceSessionId, operatorUserId);
+    const session = await this.sessionRepository.findByIdForOperator(
+      serviceSessionId,
+      operatorUserId,
+    );
     if (!session) throw appErrors.notFound('Atendimento');
     if (session.status !== 'OPEN') throw appErrors.sessionInvalid();
     await this.sessionRepository.close(serviceSessionId, operatorUserId, this.clock.now());
@@ -57,7 +61,10 @@ export class ServiceSessionService {
 
   // Validar se o atendimento continua aberto, dentro do prazo e do operador
   async validate(serviceSessionId: string, operatorUserId: string) {
-    const session = await this.sessionRepository.findByIdForOperator(serviceSessionId, operatorUserId);
+    const session = await this.sessionRepository.findByIdForOperator(
+      serviceSessionId,
+      operatorUserId,
+    );
     if (!session) throw appErrors.sessionInvalid();
     if (session.status !== 'OPEN') throw appErrors.sessionInvalid();
     if (session.expiresAt <= this.clock.now()) {

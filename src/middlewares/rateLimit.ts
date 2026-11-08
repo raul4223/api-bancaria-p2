@@ -9,7 +9,13 @@ const createLimiter = (windowMs: number, limit: number) =>
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     skip: () => env.nodeEnv === 'test',
-    handler: (_req, res) => { res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Muitas tentativas. Aguarde e tente novamente.' } }); },
+    handler: (_req, res) => {
+      res
+        .status(429)
+        .json({
+          error: { code: 'RATE_LIMITED', message: 'Muitas tentativas. Aguarde e tente novamente.' },
+        });
+    },
   });
 
 export const loginRateLimit = createLimiter(15 * 60 * 1000, 10);

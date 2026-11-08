@@ -11,6 +11,13 @@ Este projeto é uma simulação acadêmica. Nenhum fluxo acessa bancos, o Banco 
 - O `customerId` é obtido do atendimento, nunca do corpo da requisição. IDs de contas, chaves e favorecidos de outro cliente retornam 404.
 - Redefinição de senha, recuperação de acesso e conferência documental não fazem parte desta versão.
 
+## Identificação de clientes e contas
+
+- No balcão, o funcionário identifica o cliente pelo **CPF** do documento, não por um código interno. Por isso o CRUD de clientes usa o CPF na rota: `GET`, `PATCH` e `DELETE /api/v1/customers/{cpf}`. O UUID continua como chave interna no banco e nas relações (contas, atendimentos), mas não é exigido nas rotas.
+- A listagem geral mostra o CPF mascarado (`***.982.247-**`) e, para cada cliente, a agência e o número de cada conta, o tipo e o status. O CPF completo aparece só na consulta individual, para o operador conferir com o documento.
+- Toda conta de cliente tem **agência `0001` e um número de 7 dígitos** gerado pelo banco. Depósito, saque, transferência (`sourceAccountNumber` e, na INTERNAL, `destinationAccountNumber`), extrato, consulta de conta, bloqueio e chaves Pix identificam a conta pelo número. A TED informa agência e número de destino.
+- Limitação: o CPF na URL pode aparecer em logs de servidor e no histórico do navegador. Em produção, a busca seria feita por `POST` com o CPF no corpo, sempre sob HTTPS.
+
 ## Contas e movimentações
 
 - O atendimento pode abrir contas `CHECKING` ou `SAVINGS`, com saldo zero. A agência fictícia é `0001`; o número é gerado pelo servidor.
@@ -26,7 +33,7 @@ Este projeto é uma simulação acadêmica. Nenhum fluxo acessa bancos, o Banco 
 
 | Tipo       | Destino                                                    | Regra                                                        | Tarifa padrão |
 | ---------- | ---------------------------------------------------------- | ------------------------------------------------------------ | ------------: |
-| `INTERNAL` | ID de outra conta do mesmo cliente                         | 24 horas; não pode enviar à própria conta                    |       R$ 0,00 |
+| `INTERNAL` | Número de outra conta do mesmo cliente                     | 24 horas; não pode enviar à própria conta                    |       R$ 0,00 |
 | `PIX`      | Chave cadastrada (CPF, e-mail, telefone ou UUID aleatório) | 24/7; limite noturno por operação                            |       R$ 0,00 |
 | `TED`      | Agência e número de conta                                  | Dias úteis, das 06:30 às 17:00 se a regra estiver habilitada |       R$ 5,00 |
 

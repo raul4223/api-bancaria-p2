@@ -25,10 +25,22 @@ const envSchema = z.object({
   BANK_TIMEZONE: z.string().default('America/Sao_Paulo'),
   TED_FEE_CENTS: z.coerce.bigint().nonnegative().default(500n),
   TED_BUSINESS_HOURS_ENABLED: z.stringbool().default(true),
-  TED_START_TIME: z.string().regex(/^\d{2}:\d{2}$/).default('06:30'),
-  TED_END_TIME: z.string().regex(/^\d{2}:\d{2}$/).default('17:00'),
-  PIX_NIGHT_START: z.string().regex(/^\d{2}:\d{2}$/).default('20:00'),
-  PIX_NIGHT_END: z.string().regex(/^\d{2}:\d{2}$/).default('06:00'),
+  TED_START_TIME: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('06:30'),
+  TED_END_TIME: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('17:00'),
+  PIX_NIGHT_START: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('20:00'),
+  PIX_NIGHT_END: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('06:00'),
   PIX_NIGHT_LIMIT_CENTS: z.coerce.bigint().positive().default(100_000n),
   PIX_KEYS_PER_ACCOUNT: z.coerce.number().int().positive().default(5),
 });
@@ -41,7 +53,13 @@ if (!parsed.success) {
 }
 
 // Separar os dados de conexão de uma URL MySQL completa
-function readDatabaseUrl(value: string): { host: string; port: number; user: string; password: string; database: string } {
+function readDatabaseUrl(value: string): {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+} {
   const url = new URL(value);
   return {
     host: url.hostname,
@@ -52,18 +70,20 @@ function readDatabaseUrl(value: string): { host: string; port: number; user: str
   };
 }
 
-const databaseConnection = parsed.data.NODE_ENV === 'test'
-  ? readDatabaseUrl(parsed.data.TEST_DATABASE_URL)
-  : {
-      host: parsed.data.DATABASE_HOST,
-      port: parsed.data.DATABASE_PORT,
-      user: parsed.data.DATABASE_USER,
-      password: parsed.data.DATABASE_PASSWORD,
-      database: parsed.data.DATABASE_NAME,
-    };
+const databaseConnection =
+  parsed.data.NODE_ENV === 'test'
+    ? readDatabaseUrl(parsed.data.TEST_DATABASE_URL)
+    : {
+        host: parsed.data.DATABASE_HOST,
+        port: parsed.data.DATABASE_PORT,
+        user: parsed.data.DATABASE_USER,
+        password: parsed.data.DATABASE_PASSWORD,
+        database: parsed.data.DATABASE_NAME,
+      };
 
 export const env = {
-  databaseUrl: parsed.data.NODE_ENV === 'test' ? parsed.data.TEST_DATABASE_URL : parsed.data.DATABASE_URL,
+  databaseUrl:
+    parsed.data.NODE_ENV === 'test' ? parsed.data.TEST_DATABASE_URL : parsed.data.DATABASE_URL,
   databaseHost: databaseConnection.host,
   databasePort: databaseConnection.port,
   databaseUser: databaseConnection.user,

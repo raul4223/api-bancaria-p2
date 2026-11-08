@@ -15,12 +15,16 @@ import { TransactionService } from '../../src/services/TransactionService.js';
 const apiBase = '/api/v1';
 let token = '';
 let customerAId = '';
-let customerBId = '';
 let customerCId = '';
 let accountA1Id = '';
 let accountA2Id = '';
 let accountB1Id = '';
-let accountB2Id = '';
+let accountA1Number = '';
+let accountA2Number = '';
+let accountB1Number = '';
+let accountB2Number = '';
+const cpfA = '52998224725';
+const cpfB = '11144477735';
 let serviceSessionAId = '';
 let serviceSessionBId = '';
 let pixKeyB = '';
@@ -63,11 +67,16 @@ async function openSession(cpf: string, customerPassword: string): Promise<strin
   return response.body.id as string;
 }
 
-// Abrir conta corrente ou poupança no atendimento
-async function openAccount(sessionId: string, type: 'CHECKING' | 'SAVINGS'): Promise<string> {
+// Abrir conta corrente ou poupança no atendimento e devolver ID e número
+async function openAccount(
+  sessionId: string,
+  type: 'CHECKING' | 'SAVINGS',
+): Promise<{ id: string; number: string }> {
   const response = await post(`${apiBase}/customer-service/accounts`, { type }, sessionId);
   expect(response.status).toBe(201);
-  return response.body.id as string;
+  expect(response.body.agency).toBe('0001');
+  expect(response.body.number).toMatch(/^\d{7}$/);
+  return { id: response.body.id as string, number: response.body.number as string };
 }
 
 // Simular a data e hora do banco e renovar o JWT do operador nesse horário
@@ -84,7 +93,7 @@ async function prepareTimedTransfers(): Promise<string> {
   const sessionId = await openSession('52998224725', '291847');
   const deposit = await post(
     `${apiBase}/customer-service/transactions/deposits`,
-    { accountId: accountA1Id, amountCents: '300000' },
+    { accountNumber: accountA1Number, amountCents: '300000' },
     sessionId,
     randomUUID(),
   );
@@ -99,7 +108,7 @@ async function sendTed(sessionId: string, amountCents: string): Promise<Test> {
     `${apiBase}/customer-service/transactions/transfers`,
     {
       transferType: 'TED',
-      sourceAccountId: accountA1Id,
+      sourceAccountNumber: accountA1Number,
       destinationAgency: b1.agency,
       destinationAccountNumber: b1.number,
       amountCents,
@@ -113,7 +122,7 @@ async function sendTed(sessionId: string, amountCents: string): Promise<Test> {
 function sendPix(sessionId: string, amountCents: string): Test {
   return post(
     `${apiBase}/customer-service/transactions/transfers`,
-    { transferType: 'PIX', sourceAccountId: accountA1Id, pixKey: pixKeyB, amountCents },
+    { transferType: 'PIX', sourceAccountNumber: accountA1Number, pixKey: pixKeyB, amountCents },
     sessionId,
     randomUUID(),
   );
@@ -243,7 +252,6 @@ describe('API bancária simulada', () => {
     expect(createC.status).toBe(201);
     expect(createA.body).not.toHaveProperty('passwordHash');
     customerAId = createA.body.id as string;
-    customerBId = createB.body.id as string;
     customerCId = createC.body.id as string;
 
     const duplicateEmail = await post(`${apiBase}/customers`, {
@@ -268,7 +276,7 @@ describe('API bancária simulada', () => {
     expect(list.body.data.find((customer: { id: string }) => customer.id === customerAId).cpf).toBe(
       '***.982.247-**',
     );
-    expect((await get(`${apiBase}/customers/${customerBId}`)).status).toBe(200);
+    expect((await get(`${apiBase}/customers/${cpfB}`)).status).toBe(200);
     expect(
       (await get(`${apiBase}/customers?search=Cliente%20A`)).body.data.map(
         (customer: { id: string }) => customer.id,
@@ -279,11 +287,11 @@ describe('API bancária simulada', () => {
         (customer: { id: string }) => customer.id,
       ),
     ).toEqual([customerAId]);
-    const detail = await get(`${apiBase}/customers/${customerAId}`);
+    const detail = await get(`${apiBase}/customers/${cpfA}`);
     expect(detail.body.cpf).toBe('52998224725');
     expect(detail.body).not.toHaveProperty('passwordHash');
 
-    const updated = await patch(`${apiBase}/customers/${customerAId}`, {
+    const updated = await patch(`${apiBase}/customers/${cpfA}`, {
       name: 'Cliente A Atualizado',
     });
     expect(updated.status).toBe(200);
@@ -295,8 +303,13 @@ describe('API bancária simulada', () => {
       customerPassword: '736194',
     });
     expect(createTemporary.status).toBe(201);
-    expect((await remove(`${apiBase}/customers/${createTemporary.body.id}`)).status).toBe(204);
-    expect((await get(`${apiBase}/customers/${createTemporary.body.id}`)).status).toBe(404);
+    expect((await get(`${apiBase}/customers/123.456.789-09`)).body.name).toBe(
+      'Cadastro Temporário',
+    );
+    expect((await get(`${apiBase}/customers/${createTemporary.body.id}`)).status).toBe(422);
+    expect((await remove(`${apiBase}/customers/12345678909`)).status).toBe(204);
+    expect((await get(`${apiBase}/customers/12345678909`)).status).toBe(404);
+    expect((await remove(`${apiBase}/customers/12345678909`)).status).toBe(404);
   });
 
   it('controla atendimentos, isolamento por cliente e os CRUDs dependentes de conta', async () => {
@@ -334,11 +347,14 @@ describe('API bancária simulada', () => {
     expect(locked.status).toBe(423);
 
     serviceSessionBId = await openSession('11144477735', '847291');
-    accountB1Id = await openAccount(serviceSessionBId, 'CHECKING');
-    accountB2Id = await openAccount(serviceSessionBId, 'SAVINGS');
+    ({ id: accountB1Id, number: accountB1Number } = await openAccount(
+      serviceSessionBId,
+      'CHECKING',
+    ));
+    ({ number: accountB2Number } = await openAccount(serviceSessionBId, 'SAVINGS'));
     const createPix = await post(
       `${apiBase}/customer-service/pix-keys`,
-      { accountId: accountB1Id, keyType: 'EMAIL', keyValue: 'b@example.test' },
+      { accountNumber: accountB1Number, keyType: 'EMAIL', keyValue: 'b@example.test' },
       serviceSessionBId,
     );
     expect(createPix.status).toBe(201);
@@ -347,7 +363,7 @@ describe('API bancária simulada', () => {
 
     const randomKey = await post(
       `${apiBase}/customer-service/pix-keys`,
-      { accountId: accountB2Id, keyType: 'RANDOM' },
+      { accountNumber: accountB2Number, keyType: 'RANDOM' },
       serviceSessionBId,
     );
     expect(randomKey.status).toBe(201);
@@ -360,7 +376,7 @@ describe('API bancária simulada', () => {
     ).toBe(200);
     const movePix = await patch(
       `${apiBase}/customer-service/pix-keys/${randomKey.body.id}`,
-      { accountId: accountB1Id },
+      { accountNumber: accountB1Number },
       serviceSessionBId,
     );
     expect(movePix.status).toBe(200);
@@ -379,13 +395,13 @@ describe('API bancária simulada', () => {
     ).toBe(404);
     const wrongCpfKey = await post(
       `${apiBase}/customer-service/pix-keys`,
-      { accountId: accountB1Id, keyType: 'CPF', keyValue: '52998224725' },
+      { accountNumber: accountB1Number, keyType: 'CPF', keyValue: '52998224725' },
       serviceSessionBId,
     );
     expect(wrongCpfKey.status).toBe(422);
     const duplicateKey = await post(
       `${apiBase}/customer-service/pix-keys`,
-      { accountId: accountB1Id, keyType: 'EMAIL', keyValue: 'b@example.test' },
+      { accountNumber: accountB1Number, keyType: 'EMAIL', keyValue: 'b@example.test' },
       serviceSessionBId,
     );
     expect(duplicateKey.status).toBe(409);
@@ -394,7 +410,7 @@ describe('API bancária simulada', () => {
         (
           await post(
             `${apiBase}/customer-service/pix-keys`,
-            { accountId: accountB1Id, keyType: 'RANDOM' },
+            { accountNumber: accountB1Number, keyType: 'RANDOM' },
             serviceSessionBId,
           )
         ).status,
@@ -402,7 +418,7 @@ describe('API bancária simulada', () => {
     }
     const pixKeyLimit = await post(
       `${apiBase}/customer-service/pix-keys`,
-      { accountId: accountB1Id, keyType: 'RANDOM' },
+      { accountNumber: accountB1Number, keyType: 'RANDOM' },
       serviceSessionBId,
     );
     expect(pixKeyLimit.status).toBe(422);
@@ -417,8 +433,14 @@ describe('API bancária simulada', () => {
       .set('Authorization', `Bearer ${otherToken}`)
       .set('X-Service-Session-Id', serviceSessionAId);
     expect(otherOperatorSessionUse.status).toBe(403);
-    accountA1Id = await openAccount(serviceSessionAId, 'CHECKING');
-    accountA2Id = await openAccount(serviceSessionAId, 'SAVINGS');
+    ({ id: accountA1Id, number: accountA1Number } = await openAccount(
+      serviceSessionAId,
+      'CHECKING',
+    ));
+    ({ id: accountA2Id, number: accountA2Number } = await openAccount(
+      serviceSessionAId,
+      'SAVINGS',
+    ));
     expect((await get(`${apiBase}/customer-service/accounts`, serviceSessionAId)).body.total).toBe(
       2,
     );
@@ -430,22 +452,26 @@ describe('API bancária simulada', () => {
     expect(accountA2.balanceCents).toBe(0n);
     expect(accountA1.number).not.toBe(accountA2.number);
     expect(
-      (await get(`${apiBase}/customer-service/accounts/${accountB1Id}`, serviceSessionAId)).status,
+      (await get(`${apiBase}/customer-service/accounts/${accountB1Number}`, serviceSessionAId))
+        .status,
     ).toBe(404);
 
     const systemAccount = await prisma.account.findFirstOrThrow({ where: { type: 'SYSTEM' } });
     expect(
-      (await get(`${apiBase}/customer-service/accounts/${systemAccount.id}`, serviceSessionAId))
+      (await get(`${apiBase}/customer-service/accounts/${systemAccount.number}`, serviceSessionAId))
         .status,
+    ).toBe(422);
+    expect(
+      (await get(`${apiBase}/customer-service/accounts/0000000`, serviceSessionAId)).status,
     ).toBe(404);
     expect(
       (
-        await patch(`${apiBase}/accounts/${systemAccount.id}/status`, {
+        await patch(`${apiBase}/accounts/${systemAccount.number}/status`, {
           status: 'BLOCKED',
           reason: 'Teste inválido',
         })
       ).status,
-    ).toBe(404);
+    ).toBe(422);
 
     expect(
       (await get(`${apiBase}/customer-service/pix-keys/${pixKeyBId}`, serviceSessionAId)).status,
@@ -454,7 +480,7 @@ describe('API bancária simulada', () => {
       (
         await patch(
           `${apiBase}/customer-service/pix-keys/${pixKeyBId}`,
-          { accountId: accountA1Id },
+          { accountNumber: accountA1Number },
           serviceSessionAId,
         )
       ).status,
@@ -515,7 +541,7 @@ describe('API bancária simulada', () => {
 
     const ownPixKey = await post(
       `${apiBase}/customer-service/pix-keys`,
-      { accountId: accountA2Id, keyType: 'EMAIL', keyValue: 'a@example.test' },
+      { accountNumber: accountA2Number, keyType: 'EMAIL', keyValue: 'a@example.test' },
       serviceSessionAId,
     );
     expect(ownPixKey.status).toBe(201);
@@ -523,7 +549,7 @@ describe('API bancária simulada', () => {
       (
         await patch(
           `${apiBase}/customer-service/pix-keys/${ownPixKey.body.id}`,
-          { accountId: accountA1Id },
+          { accountNumber: accountA1Number },
           serviceSessionAId,
         )
       ).status,
@@ -651,21 +677,21 @@ describe('API bancária simulada', () => {
 
     expect(
       (
-        await patch(`${apiBase}/accounts/${accountB1Id}/status`, {
+        await patch(`${apiBase}/accounts/${accountB1Number}/status`, {
           status: 'BLOCKED',
           reason: 'Conferência acadêmica',
         })
       ).status,
     ).toBe(200);
     expect(
-      (await patch(`${apiBase}/accounts/${accountB1Id}/status`, { status: 'ACTIVE' })).status,
+      (await patch(`${apiBase}/accounts/${accountB1Number}/status`, { status: 'ACTIVE' })).status,
     ).toBe(200);
   });
 
   it('executa depósitos, saque, PIX, TED e INTERNAL com idempotência, auditoria e ledger equilibrado', async () => {
     const noSession = await post(
       `${apiBase}/customer-service/transactions/deposits`,
-      { accountId: accountA1Id, amountCents: '10000' },
+      { accountNumber: accountA1Number, amountCents: '10000' },
       undefined,
       randomUUID(),
     );
@@ -674,14 +700,14 @@ describe('API bancária simulada', () => {
     const depositKey = randomUUID();
     const deposit = await post(
       `${apiBase}/customer-service/transactions/deposits`,
-      { accountId: accountA1Id, amountCents: '10000' },
+      { accountNumber: accountA1Number, amountCents: '10000' },
       serviceSessionAId,
       depositKey,
     );
     expect(deposit.status).toBe(201);
     const repeatedDeposit = await post(
       `${apiBase}/customer-service/transactions/deposits`,
-      { accountId: accountA1Id, amountCents: '10000' },
+      { accountNumber: accountA1Number, amountCents: '10000' },
       serviceSessionAId,
       depositKey,
     );
@@ -689,7 +715,7 @@ describe('API bancária simulada', () => {
     expect(repeatedDeposit.body.id).toBe(deposit.body.id);
     const conflictingDeposit = await post(
       `${apiBase}/customer-service/transactions/deposits`,
-      { accountId: accountA1Id, amountCents: '9000' },
+      { accountNumber: accountA1Number, amountCents: '9000' },
       serviceSessionAId,
       depositKey,
     );
@@ -700,8 +726,8 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'INTERNAL',
-        sourceAccountId: accountA1Id,
-        destinationAccountId: accountA2Id,
+        sourceAccountNumber: accountA1Number,
+        destinationAccountNumber: accountA2Number,
         amountCents: '1000',
       },
       serviceSessionAId,
@@ -712,8 +738,8 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'INTERNAL',
-        sourceAccountId: accountA1Id,
-        destinationAccountId: accountA2Id,
+        sourceAccountNumber: accountA1Number,
+        destinationAccountNumber: accountA2Number,
         amountCents: '1000',
       },
       serviceSessionAId,
@@ -726,7 +752,7 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'PIX',
-        sourceAccountId: accountA1Id,
+        sourceAccountNumber: accountA1Number,
         amountCents: '3000',
         pixKey: pixKeyB,
       },
@@ -742,7 +768,7 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'TED',
-        sourceAccountId: accountA1Id,
+        sourceAccountNumber: accountA1Number,
         amountCents: '2000',
         destinationAgency: '0001',
         destinationAccountNumber: b1Number,
@@ -755,7 +781,7 @@ describe('API bancária simulada', () => {
 
     const withdrawal = await post(
       `${apiBase}/customer-service/transactions/withdrawals`,
-      { accountId: accountA1Id, amountCents: '500' },
+      { accountNumber: accountA1Number, amountCents: '500' },
       serviceSessionAId,
       randomUUID(),
     );
@@ -775,14 +801,14 @@ describe('API bancária simulada', () => {
 
     const insufficient = await post(
       `${apiBase}/customer-service/transactions/withdrawals`,
-      { accountId: accountA1Id, amountCents: '99999' },
+      { accountNumber: accountA1Number, amountCents: '99999' },
       serviceSessionAId,
       randomUUID(),
     );
     expect(insufficient.status).toBe(422);
     const invalidAmount = await post(
       `${apiBase}/customer-service/transactions/deposits`,
-      { accountId: accountA1Id, amountCents: '0' },
+      { accountNumber: accountA1Number, amountCents: '0' },
       serviceSessionAId,
       randomUUID(),
     );
@@ -792,7 +818,7 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'PIX',
-        sourceAccountId: accountA1Id,
+        sourceAccountNumber: accountA1Number,
         amountCents: '100',
         pixKey: 'inexistente@example.test',
       },
@@ -804,8 +830,8 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'INTERNAL',
-        sourceAccountId: accountA1Id,
-        destinationAccountId: accountA1Id,
+        sourceAccountNumber: accountA1Number,
+        destinationAccountNumber: accountA1Number,
         amountCents: '100',
       },
       serviceSessionAId,
@@ -816,8 +842,8 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'INTERNAL',
-        sourceAccountId: accountA1Id,
-        destinationAccountId: accountB1Id,
+        sourceAccountNumber: accountA1Number,
+        destinationAccountNumber: accountB1Number,
         amountCents: '100',
       },
       serviceSessionAId,
@@ -828,8 +854,8 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'INTERNAL',
-        sourceAccountId: accountB1Id,
-        destinationAccountId: accountA1Id,
+        sourceAccountNumber: accountB1Number,
+        destinationAccountNumber: accountA1Number,
         amountCents: '100',
       },
       serviceSessionAId,
@@ -840,7 +866,7 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'TED',
-        sourceAccountId: accountA1Id,
+        sourceAccountNumber: accountA1Number,
         amountCents: '2600',
         destinationAgency: '0001',
         destinationAccountNumber: (
@@ -854,7 +880,7 @@ describe('API bancária simulada', () => {
 
     expect(
       (
-        await patch(`${apiBase}/accounts/${accountB1Id}/status`, {
+        await patch(`${apiBase}/accounts/${accountB1Number}/status`, {
           status: 'BLOCKED',
           reason: 'Teste de bloqueio de destino',
         })
@@ -864,7 +890,7 @@ describe('API bancária simulada', () => {
       `${apiBase}/customer-service/transactions/transfers`,
       {
         transferType: 'PIX',
-        sourceAccountId: accountA1Id,
+        sourceAccountNumber: accountA1Number,
         amountCents: '100',
         pixKey: pixKeyB,
       },
@@ -873,12 +899,12 @@ describe('API bancária simulada', () => {
     );
     expect(blockedDestination.status).toBe(422);
     expect(
-      (await patch(`${apiBase}/accounts/${accountB1Id}/status`, { status: 'ACTIVE' })).status,
+      (await patch(`${apiBase}/accounts/${accountB1Number}/status`, { status: 'ACTIVE' })).status,
     ).toBe(200);
 
     expect(
       (
-        await patch(`${apiBase}/accounts/${accountA1Id}/status`, {
+        await patch(`${apiBase}/accounts/${accountA1Number}/status`, {
           status: 'BLOCKED',
           reason: 'Teste de bloqueio de origem',
         })
@@ -887,7 +913,7 @@ describe('API bancária simulada', () => {
     const blockedSource = await post(
       `${apiBase}/customer-service/transactions/withdrawals`,
       {
-        accountId: accountA1Id,
+        accountNumber: accountA1Number,
         amountCents: '100',
       },
       serviceSessionAId,
@@ -895,19 +921,19 @@ describe('API bancária simulada', () => {
     );
     expect(blockedSource.status).toBe(422);
     expect(
-      (await patch(`${apiBase}/accounts/${accountA1Id}/status`, { status: 'ACTIVE' })).status,
+      (await patch(`${apiBase}/accounts/${accountA1Number}/status`, { status: 'ACTIVE' })).status,
     ).toBe(200);
 
     const concurrent = await Promise.all([
       post(
         `${apiBase}/customer-service/transactions/withdrawals`,
-        { accountId: accountA1Id, amountCents: '2000' },
+        { accountNumber: accountA1Number, amountCents: '2000' },
         serviceSessionAId,
         randomUUID(),
       ),
       post(
         `${apiBase}/customer-service/transactions/withdrawals`,
-        { accountId: accountA1Id, amountCents: '2000' },
+        { accountNumber: accountA1Number, amountCents: '2000' },
         serviceSessionAId,
         randomUUID(),
       ),
@@ -927,13 +953,13 @@ describe('API bancária simulada', () => {
     const simultaneousDuplicates = await Promise.all([
       post(
         `${apiBase}/customer-service/transactions/deposits`,
-        { accountId: accountA1Id, amountCents: '100' },
+        { accountNumber: accountA1Number, amountCents: '100' },
         serviceSessionAId,
         duplicateKey,
       ),
       post(
         `${apiBase}/customer-service/transactions/deposits`,
-        { accountId: accountA1Id, amountCents: '100' },
+        { accountNumber: accountA1Number, amountCents: '100' },
         serviceSessionAId,
         duplicateKey,
       ),
@@ -966,7 +992,7 @@ describe('API bancária simulada', () => {
     const failingService = new TransactionService(failingLedgerRepository, new AccountRepository());
     await expect(
       failingService.withdraw(
-        { accountId: accountA1Id, amountCents: '100' },
+        { accountNumber: accountA1Number, amountCents: '100' },
         {
           customerId: customerAId,
           operatorUserId: operatorId,
@@ -993,7 +1019,7 @@ describe('API bancária simulada', () => {
     ).toBeNull();
 
     const statement = await get(
-      `${apiBase}/customer-service/accounts/${accountA1Id}/statement?page=1&pageSize=2`,
+      `${apiBase}/customer-service/accounts/${accountA1Number}/statement?page=1&pageSize=2`,
       serviceSessionAId,
     );
     expect(statement.status).toBe(200);
@@ -1002,14 +1028,14 @@ describe('API bancária simulada', () => {
     expect(statement.body.data[0].counterparty.number).toMatch(/\*/);
     expect(statement.body.data[0].direction).toBeTruthy();
     const pixStatement = await get(
-      `${apiBase}/customer-service/accounts/${accountA1Id}/statement?page=1&pageSize=20&type=TRANSFER&transferType=PIX`,
+      `${apiBase}/customer-service/accounts/${accountA1Number}/statement?page=1&pageSize=20&type=TRANSFER&transferType=PIX`,
       serviceSessionAId,
     );
     expect(pixStatement.body.total).toBe(1);
     expect(pixStatement.body.data[0].transferType).toBe('PIX');
 
     const accountStatus = await get(
-      `${apiBase}/customer-service/accounts/${accountA1Id}`,
+      `${apiBase}/customer-service/accounts/${accountA1Number}`,
       serviceSessionAId,
     );
     expect(accountStatus.status).toBe(200);
@@ -1030,12 +1056,24 @@ describe('API bancária simulada', () => {
     );
     const closedSessionRequest = await post(
       `${apiBase}/customer-service/transactions/withdrawals`,
-      { accountId: accountA1Id, amountCents: '1' },
+      { accountNumber: accountA1Number, amountCents: '1' },
       serviceSessionAId,
       randomUUID(),
     );
     expect(closedSessionRequest.status).toBe(403);
-    expect((await remove(`${apiBase}/customers/${customerAId}`)).status).toBe(409);
+    expect((await remove(`${apiBase}/customers/${cpfA}`)).status).toBe(409);
+    const listedA = (await get(`${apiBase}/customers?cpf=${cpfA}`)).body.data[0];
+    expect(listedA.cpf).toBe('***.982.247-**');
+    expect(listedA.accounts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ agency: '0001', number: accountA1Number, type: 'CHECKING' }),
+        expect.objectContaining({ agency: '0001', number: accountA2Number, type: 'SAVINGS' }),
+      ]),
+    );
+    const detailA = (await get(`${apiBase}/customers/${cpfA}`)).body;
+    expect(detailA.accounts.map((account: { number: string }) => account.number)).toEqual(
+      expect.arrayContaining([accountA1Number, accountA2Number]),
+    );
 
     const expiringSession = await openSession('11144477735', '847291');
     await prisma.serviceSession.update({
@@ -1054,7 +1092,7 @@ describe('API bancária simulada', () => {
     env.tedBusinessHoursEnabled = true;
     try {
       expect(
-        (await patch(`${apiBase}/accounts/${accountB1Id}/status`, { status: 'ACTIVE' })).status,
+        (await patch(`${apiBase}/accounts/${accountB1Number}/status`, { status: 'ACTIVE' })).status,
       ).toBe(200);
 
       // Sábado, 12:00 em São Paulo: TED recusada por não ser dia útil

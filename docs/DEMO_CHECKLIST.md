@@ -32,14 +32,14 @@ Cadastre os dois em `POST /api/v1/customers`. Senhas têm seis dígitos e não p
 
 1. Abra `POST /api/v1/service-sessions` com CPF e senha de B. Guarde `id` da resposta.
 2. No Swagger, informe esse ID em `serviceSession` (`X-Service-Session-Id`).
-3. Abra conta corrente em `POST /api/v1/customer-service/accounts` com `{"type":"CHECKING"}`. Guarde o ID como `B1`.
+3. Abra conta corrente em `POST /api/v1/customer-service/accounts` com `{"type":"CHECKING"}`. Guarde o **número da conta** (`number`, 7 dígitos) como `B1`.
 4. Cadastre uma chave `EMAIL` em `POST /api/v1/customer-service/pix-keys`, vinculada a `B1`, com `b@example.test`.
 5. Feche o atendimento em `PATCH /api/v1/service-sessions/{serviceSessionId}/close`.
 
 ## 4. Atendimento de A e cadastro do favorecido
 
 1. Abra atendimento para A e configure o novo `id` em `serviceSession`.
-2. Abra `CHECKING` e `SAVINGS`; guarde os IDs como `A1` e `A2`.
+2. Abra `CHECKING` e `SAVINGS`; guarde os **números das contas** como `A1` e `A2`. Todas as operações usam o número da conta (agência fixa `0001`).
 3. Cadastre B como favorecido TED, usando agência `0001` e o número de `B1`.
 
 ## 5. Cenário financeiro
@@ -80,13 +80,13 @@ Se a demonstração ocorrer fora do horário configurado de TED, mostre primeiro
 - Use a mesma chave com payload diferente: a API deve retornar HTTP 409.
 - Demonstre uma tentativa recusada por saldo insuficiente; confira que saldo e ledger não mudaram.
 - Feche o atendimento de A e tente movimentar com o mesmo ID: resposta esperada HTTP 403.
-- Bloqueie B1 com motivo usando `PATCH /api/v1/accounts/{accountId}/status`, mostre uma operação recusada e reative a conta.
+- Bloqueie B1 com motivo usando `PATCH /api/v1/accounts/{accountNumber}/status`, mostre uma operação recusada e reative a conta.
 - Para demonstrar o bloqueio de senha, envie cinco senhas incorretas ao abrir um atendimento para um cliente fictício: resposta final HTTP 423. O bloqueio local dura 15 minutos.
 
 ## 7. Auditoria e conciliação
 
 - Faça `GET /api/v1/ledger/reconciliation`; o resultado esperado é `balanced: true`.
-- Mostre a listagem geral de clientes e confirme CPF mascarado; mostre o detalhe de A e suas contas.
+- Mostre a listagem geral de clientes: CPF mascarado, com agência e número de cada conta. Depois busque A pelo CPF em `GET /api/v1/customers/{cpf}` e mostre os dados completos e as contas com saldo.
 - No Prisma Studio, mostre `ServiceSession`, `BankTransaction`, `LedgerEntry`, `_prisma_migrations` e as contas.
 - Confirme que a transação contém operador e atendimento, que a TED tem três partidas e que débito = crédito.
 - Percorra o fluxo no código: `TransactionController.transfer` → `TransferService.transfer` → Strategy → `AccountRepository.debit`.
@@ -112,7 +112,7 @@ curl -sS -X POST http://localhost:3000/api/v1/customer-service/transactions/tran
   -H 'X-Service-Session-Id: SERVICE_SESSION_ID_LOCAL' \
   -H 'Idempotency-Key: e7000000-0000-4000-8000-000000000003' \
   -H 'Content-Type: application/json' \
-  -d '{"transferType":"PIX","sourceAccountId":"ACCOUNT_A1_ID","amountCents":"3000","pixKey":"b@example.test"}'
+  -d '{"transferType":"PIX","sourceAccountNumber":"NUMERO_DA_CONTA_A1","amountCents":"3000","pixKey":"b@example.test"}'
 ```
 
 ## 9. Plano B e entrega

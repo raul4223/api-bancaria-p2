@@ -3,7 +3,10 @@ import { InternalTransferRule } from '../../src/services/transfer-rules/Internal
 import { PixTransferRule } from '../../src/services/transfer-rules/PixTransferRule.js';
 import { TedTransferRule } from '../../src/services/transfer-rules/TedTransferRule.js';
 import { createClock } from '../../src/utils/clock.js';
-import type { TransferContext, TransferRuleConfig } from '../../src/services/transfer-rules/TransferRule.js';
+import type {
+  TransferContext,
+  TransferRuleConfig,
+} from '../../src/services/transfer-rules/TransferRule.js';
 
 const config: TransferRuleConfig = {
   bankTimezone: 'America/Sao_Paulo',
@@ -32,7 +35,10 @@ function createTransferContext(overrides: Partial<TransferContext> = {}): Transf
 describe('regra INTERNAL', () => {
   it('aceita apenas contas do mesmo cliente e não cobra tarifa', () => {
     const rule = new InternalTransferRule(config);
-    const context = createTransferContext({ transferType: 'INTERNAL', destinationCustomerId: 'customer-a' });
+    const context = createTransferContext({
+      transferType: 'INTERNAL',
+      destinationCustomerId: 'customer-a',
+    });
     expect(() => rule.validate(context)).not.toThrow();
     expect(rule.calculateFee(context.amountCents)).toBe(0n);
     expect(() => rule.validate(createTransferContext({ transferType: 'INTERNAL' }))).toThrow();

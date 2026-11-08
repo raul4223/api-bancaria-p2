@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { container } from '../container.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { validate } from '../middlewares/validate.js';
-import { customerIdParamsSchema } from '../schemas/common.schemas.js';
+import { customerCpfParamsSchema } from '../schemas/common.schemas.js';
 import {
   createCustomerSchema,
   listCustomersSchema,
@@ -23,17 +23,17 @@ customerRoutes.get(
   container.customerController.list,
 );
 customerRoutes.get(
-  '/:customerId',
-  validate({ params: customerIdParamsSchema }),
+  '/:cpf',
+  validate({ params: customerCpfParamsSchema }),
   container.customerController.getById,
 );
 customerRoutes.patch(
-  '/:customerId',
-  validate({ params: customerIdParamsSchema, body: updateCustomerSchema }),
+  '/:cpf',
+  validate({ params: customerCpfParamsSchema, body: updateCustomerSchema }),
   container.customerController.update,
 );
 customerRoutes.delete(
-  '/:customerId',
-  validate({ params: customerIdParamsSchema }),
+  '/:cpf',
+  validate({ params: customerCpfParamsSchema }),
   container.customerController.delete,
 );

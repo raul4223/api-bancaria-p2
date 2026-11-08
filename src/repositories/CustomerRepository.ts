@@ -8,14 +8,19 @@ export class CustomerRepository {
     return prisma.customer.create({ data });
   }
 
-  // Listar clientes paginados e calcular seus saldos de conta
+  // Listar clientes paginados com agência, número e saldo de cada conta
   findMany(args: { where: Prisma.CustomerWhereInput; skip: number; take: number }) {
     return prisma.customer.findMany({
       where: args.where,
       skip: args.skip,
       take: args.take,
       orderBy: { createdAt: 'desc' },
-      include: { accounts: { select: { balanceCents: true } }, _count: { select: { accounts: true } } },
+      include: {
+        accounts: {
+          select: { agency: true, number: true, type: true, status: true, balanceCents: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     });
   }
 
@@ -29,9 +34,12 @@ export class CustomerRepository {
     return prisma.customer.findUnique({ where: { id }, include: { accounts: true } });
   }
 
-  // Buscar cliente pelo CPF para abrir atendimento
+  // Buscar cliente pelo CPF com suas contas
   findByCpf(cpf: string) {
-    return prisma.customer.findUnique({ where: { cpf } });
+    return prisma.customer.findUnique({
+      where: { cpf },
+      include: { accounts: { orderBy: { createdAt: 'asc' } } },
+    });
   }
 
   // Atualizar somente os dados de contato permitidos

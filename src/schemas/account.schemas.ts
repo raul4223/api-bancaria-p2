@@ -1,5 +1,5 @@
 import { z } from './zodOpenApi.js';
-import { paginationSchema, accountIdParamsSchema } from './common.schemas.js';
+import { paginationSchema, accountNumberParamsSchema } from './common.schemas.js';
 
 // Validar o tipo de conta que será aberta no atendimento
 export const openAccountSchema = z.object({ type: z.enum(['CHECKING', 'SAVINGS']) });
@@ -13,4 +13,4 @@ export const updateAccountStatusSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('ACTIVE') }),
 ]);
 
-export { accountIdParamsSchema };
+export { accountNumberParamsSchema };

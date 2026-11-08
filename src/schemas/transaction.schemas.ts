@@ -1,5 +1,9 @@
 import { z } from './zodOpenApi.js';
-import { paginationSchema, accountIdParamsSchema } from './common.schemas.js';
+import {
+  paginationSchema,
+  accountNumberParamsSchema,
+  accountNumberSchema,
+} from './common.schemas.js';
 
 const amountSchema = z
   .string()
@@ -8,14 +12,14 @@ const amountSchema = z
 
 // Validar os dados de depósito em uma conta do cliente atendido
 export const depositSchema = z.object({
-  accountId: z.string().uuid(),
+  accountNumber: accountNumberSchema,
   amountCents: amountSchema,
   description: z.string().trim().max(240).optional(),
 });
 
 // Validar os dados de saque em uma conta do cliente atendido
 export const withdrawalSchema = z.object({
-  accountId: z.string().uuid(),
+  accountNumber: accountNumberSchema,
   amountCents: amountSchema,
   description: z.string().trim().max(240).optional(),
 });
@@ -24,14 +28,14 @@ export const withdrawalSchema = z.object({
 export const transferSchema = z.discriminatedUnion('transferType', [
   z.object({
     transferType: z.literal('PIX'),
-    sourceAccountId: z.string().uuid(),
+    sourceAccountNumber: accountNumberSchema,
     amountCents: amountSchema,
     pixKey: z.string().trim().min(1).max(254),
     description: z.string().trim().max(240).optional(),
   }),
   z.object({
     transferType: z.literal('TED'),
-    sourceAccountId: z.string().uuid(),
+    sourceAccountNumber: accountNumberSchema,
     amountCents: amountSchema,
     destinationAgency: z.string().regex(/^\d{4}$/),
     destinationAccountNumber: z.string().min(1).max(12),
@@ -39,8 +43,8 @@ export const transferSchema = z.discriminatedUnion('transferType', [
   }),
   z.object({
     transferType: z.literal('INTERNAL'),
-    sourceAccountId: z.string().uuid(),
-    destinationAccountId: z.string().uuid(),
+    sourceAccountNumber: accountNumberSchema,
+    destinationAccountNumber: accountNumberSchema,
     amountCents: amountSchema,
     description: z.string().trim().max(240).optional(),
   }),
@@ -54,4 +58,4 @@ export const statementQuerySchema = paginationSchema.extend({
   transferType: z.enum(['PIX', 'TED', 'INTERNAL']).optional(),
 });
 
-export { accountIdParamsSchema };
+export { accountNumberParamsSchema };
