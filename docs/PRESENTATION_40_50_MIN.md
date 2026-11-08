@@ -26,7 +26,7 @@ Fala importante: esta é uma simulação acadêmica. Não existe integração co
 
 1. **Stack e justificativas (3 min; slide):** MySQL 8.4 e Prisma 7 alinham persistência e migrations à disciplina; TypeScript, Express 5, Zod, Argon2id, JWT, Swagger, Vitest, Supertest, Helmet e rate limit atendem tipagem, validação, segurança, documentação e testes.
 2. **Diagrama de camadas (3 min; slide):** Route → Middleware → Controller → Service → Repository → Prisma/MySQL.
-3. **Exemplo no código (3 min; ao vivo):** percorrer `src/routes/index.ts` → `src/controllers/TransactionController.ts` → `src/services/TransferService.ts` → `src/services/transfer-rules/PixTransferRule.ts` → `src/repositories/AccountRepository.ts`.
+3. **Exemplo no código (3 min; ao vivo):** percorrer `src/routes/customer-service.routes.ts` → `src/controllers/TransactionController.ts` → `src/services/TransferService.ts` → `src/services/transfer-rules/PixTransferRule.ts` → `src/repositories/AccountRepository.ts`.
 4. **Padrões e convenções (2 min; slide):** camada de serviço, Repository, Strategy para regras de transferência, middleware em cadeia, schemas Zod, camelCase/PascalCase e comentário curto em português acima das funções.
 
 ## Bloco 3 — Swagger e cadastros (12 min)

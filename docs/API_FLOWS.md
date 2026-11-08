@@ -75,4 +75,4 @@ flowchart TD
   M -->|erro| P
 ```
 
-As três regras estão em `src/services/transfer-rules/`. O fluxo real percorre `src/routes/index.ts` → `src/controllers/TransactionController.ts` → `src/services/TransferService.ts` → regra Strategy e repositories → Prisma. A atualização condicional é o controle de concorrência que impede saldo negativo.
+As três regras estão em `src/services/transfer-rules/`. O fluxo real percorre `src/routes/customer-service.routes.ts` → `src/controllers/TransactionController.ts` → `src/services/TransferService.ts` → regra Strategy e repositories → Prisma. A atualização condicional é o controle de concorrência que impede saldo negativo.

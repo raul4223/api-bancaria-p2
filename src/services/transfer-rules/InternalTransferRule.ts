@@ -8,7 +8,10 @@ export class InternalTransferRule implements TransferRule {
 
   // Exigir que as duas contas pertençam ao mesmo cliente
   validate(context: TransferContext): void {
-    if (!context.destinationCustomerId || context.sourceCustomerId !== context.destinationCustomerId) {
+    if (
+      !context.destinationCustomerId ||
+      context.sourceCustomerId !== context.destinationCustomerId
+    ) {
       throw appErrors.sameOwnerRequired();
     }
   }

@@ -12,7 +12,7 @@ flowchart LR
   F --> G[(MySQL 8.4)]
 ```
 
-- **Route:** associa método e caminho aos middlewares e ao controller.
+- **Route:** associa método e caminho aos middlewares e ao controller. Há um arquivo por módulo em `src/routes/` (`auth`, `customer`, `service-session`, `account`, `ledger` e `customer-service`), montados em `/api/v1` por `src/routes/index.ts`.
 - **Middleware:** autentica o JWT, valida o atendimento, valida entradas Zod, limita requisições e formata erros.
 - **Controller:** lê a requisição, chama o service e converte o resultado em HTTP; não consulta Prisma.
 - **Service:** implementa regras de negócio, cálculos, autorização por cliente, transações e erros de aplicação; não conhece `Request` nem `Response` do Express.

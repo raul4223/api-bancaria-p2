@@ -20,8 +20,10 @@ export type TransferRuleConfig = {
   pixNightLimitCents: bigint;
 };
 
-// Definir validação e cálculo de tarifa de cada tipo de transferência
+// Contrato comum das regras de cada tipo de transferência
 export interface TransferRule {
+  // Validar as regras específicas do tipo de transferência
   validate(context: TransferContext): void;
+  // Calcular a tarifa cobrada por este tipo de transferência
   calculateFee(amountCents: bigint): bigint;
 }

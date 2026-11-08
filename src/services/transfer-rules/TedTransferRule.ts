@@ -6,13 +6,21 @@ import type { TransferContext, TransferRule, TransferRuleConfig } from './Transf
 // Aplicar horário comercial e tarifa de transferências TED simuladas
 export class TedTransferRule implements TransferRule {
   // Receber configurações bancárias e um relógio substituível
-  constructor(private readonly config: TransferRuleConfig, private readonly clock: Clock = systemClock) {}
+  constructor(
+    private readonly config: TransferRuleConfig,
+    private readonly clock: Clock = systemClock,
+  ) {}
 
   // Recusar TED fora do horário configurado em dias úteis
   validate(_context: TransferContext): void {
     if (!this.config.tedBusinessHoursEnabled) return;
     const date = this.clock.now();
-    const isOpen = isWithinBusinessHours(date, this.config.bankTimezone, this.config.tedStartTime, this.config.tedEndTime);
+    const isOpen = isWithinBusinessHours(
+      date,
+      this.config.bankTimezone,
+      this.config.tedStartTime,
+      this.config.tedEndTime,
+    );
     if (!isOpen) throw appErrors.tedOutsideHours();
   }
 

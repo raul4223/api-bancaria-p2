@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { Test } from 'supertest';
@@ -68,6 +68,55 @@ async function openAccount(sessionId: string, type: 'CHECKING' | 'SAVINGS'): Pro
   const response = await post(`${apiBase}/customer-service/accounts`, { type }, sessionId);
   expect(response.status).toBe(201);
   return response.body.id as string;
+}
+
+// Simular a data e hora do banco e renovar o JWT do operador nesse horário
+async function travelTo(isoDate: string): Promise<void> {
+  vi.setSystemTime(new Date(isoDate));
+  const operator = await prisma.user.findUniqueOrThrow({
+    where: { email: 'operator@example.test' },
+  });
+  token = await createAccessToken(operator.id);
+}
+
+// Abrir um atendimento do cliente A, depositar saldo e devolver o atendimento
+async function prepareTimedTransfers(): Promise<string> {
+  const sessionId = await openSession('52998224725', '291847');
+  const deposit = await post(
+    `${apiBase}/customer-service/transactions/deposits`,
+    { accountId: accountA1Id, amountCents: '300000' },
+    sessionId,
+    randomUUID(),
+  );
+  expect(deposit.status).toBe(201);
+  return sessionId;
+}
+
+// Enviar uma transferência TED de A1 para B1 no atendimento informado
+async function sendTed(sessionId: string, amountCents: string): Promise<Test> {
+  const b1 = await prisma.account.findUniqueOrThrow({ where: { id: accountB1Id } });
+  return post(
+    `${apiBase}/customer-service/transactions/transfers`,
+    {
+      transferType: 'TED',
+      sourceAccountId: accountA1Id,
+      destinationAgency: b1.agency,
+      destinationAccountNumber: b1.number,
+      amountCents,
+    },
+    sessionId,
+    randomUUID(),
+  );
+}
+
+// Enviar uma transferência PIX de A1 para a chave de B no atendimento informado
+function sendPix(sessionId: string, amountCents: string): Test {
+  return post(
+    `${apiBase}/customer-service/transactions/transfers`,
+    { transferType: 'PIX', sourceAccountId: accountA1Id, pixKey: pixKeyB, amountCents },
+    sessionId,
+    randomUUID(),
+  );
 }
 
 // Limpar exclusivamente o banco de teste em ordem segura de chaves estrangeiras
@@ -964,7 +1013,10 @@ describe('API bancária simulada', () => {
       serviceSessionAId,
     );
     expect(accountStatus.status).toBe(200);
-    expect((await get(`${apiBase}/ledger/reconciliation`)).body.balanced).toBe(true);
+    const reconciliation = await get(`${apiBase}/ledger/reconciliation`);
+    expect(reconciliation.body.balanced).toBe(true);
+    expect(reconciliation.body.mismatchedAccounts).toEqual([]);
+    expect(reconciliation.body.totalDebitsCents).toBe(reconciliation.body.totalCreditsCents);
     const transaction = await prisma.bankTransaction.findFirstOrThrow({
       where: { id: ted.body.id },
     });
@@ -994,6 +1046,67 @@ describe('API bancária simulada', () => {
     expect(
       (await prisma.serviceSession.findUniqueOrThrow({ where: { id: expiringSession } })).status,
     ).toBe('EXPIRED');
+  });
+
+  it('aplica horário bancário da TED e limite noturno do PIX pela API', async () => {
+    const originalToken = token;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    env.tedBusinessHoursEnabled = true;
+    try {
+      expect(
+        (await patch(`${apiBase}/accounts/${accountB1Id}/status`, { status: 'ACTIVE' })).status,
+      ).toBe(200);
+
+      // Sábado, 12:00 em São Paulo: TED recusada por não ser dia útil
+      await travelTo('2026-11-07T15:00:00Z');
+      const saturdaySession = await prepareTimedTransfers();
+      const saturdayBalance = (
+        await prisma.account.findUniqueOrThrow({ where: { id: accountA1Id } })
+      ).balanceCents;
+      const saturdayTed = await sendTed(saturdaySession, '2000');
+      expect(saturdayTed.status).toBe(422);
+      expect(saturdayTed.body.error.code).toBe('TED_OUTSIDE_BUSINESS_HOURS');
+      expect(
+        (await prisma.account.findUniqueOrThrow({ where: { id: accountA1Id } })).balanceCents,
+      ).toBe(saturdayBalance);
+
+      // Segunda-feira, 18:00 em São Paulo: TED recusada depois do horário
+      await travelTo('2026-11-09T21:00:00Z');
+      const lateSession = await prepareTimedTransfers();
+      const lateTed = await sendTed(lateSession, '2000');
+      expect(lateTed.status).toBe(422);
+      expect(lateTed.body.error.code).toBe('TED_OUTSIDE_BUSINESS_HOURS');
+
+      // Segunda-feira, 22:00 em São Paulo: PIX noturno acima do limite é recusado
+      await travelTo('2026-11-10T01:00:00Z');
+      const nightSession = await prepareTimedTransfers();
+      const nightPixAbove = await sendPix(nightSession, '100001');
+      expect(nightPixAbove.status).toBe(422);
+      expect(nightPixAbove.body.error.code).toBe('PIX_NIGHT_LIMIT_EXCEEDED');
+      const nightPixBelow = await sendPix(nightSession, '100000');
+      expect(nightPixBelow.status).toBe(201);
+
+      // Terça-feira, 10:00 em São Paulo: TED aceita com tarifa e PIX sem limite noturno
+      await travelTo('2026-11-10T13:00:00Z');
+      const daySession = await prepareTimedTransfers();
+      const dayTed = await sendTed(daySession, '2000');
+      expect(dayTed.status).toBe(201);
+      expect(dayTed.body.feeCents).toBe(env.tedFeeCents.toString());
+      const dayPix = await sendPix(daySession, '150000');
+      expect(dayPix.status).toBe(201);
+
+      // Regra de horário desligada: TED aceita mesmo no fim de semana
+      env.tedBusinessHoursEnabled = false;
+      await travelTo('2026-11-07T15:00:00Z');
+      const disabledSession = await prepareTimedTransfers();
+      expect((await sendTed(disabledSession, '2000')).status).toBe(201);
+
+      expect((await get(`${apiBase}/ledger/reconciliation`)).body.balanced).toBe(true);
+    } finally {
+      env.tedBusinessHoursEnabled = false;
+      vi.useRealTimers();
+      token = originalToken;
+    }
   });
 
   it('expõe Swagger, OpenAPI, health e as rotas documentadas', async () => {

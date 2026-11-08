@@ -21,22 +21,26 @@ export class LedgerService {
       if (group.direction === 'CREDIT') credits += amount;
       else debits += amount;
     }
-    const discrepancies = accounts.flatMap((account) => {
+    const mismatchedAccounts = accounts.flatMap((account) => {
       const ledgerBalanceCents = accountLedger.get(account.id) ?? 0n;
-      return ledgerBalanceCents === account.balanceCents ? [] : [{
-        accountId: account.id,
-        number: account.number,
-        accountType: account.type,
-        materializedBalanceCents: account.balanceCents.toString(),
-        ledgerBalanceCents: ledgerBalanceCents.toString(),
-      }];
+      return ledgerBalanceCents === account.balanceCents
+        ? []
+        : [
+            {
+              accountId: account.id,
+              number: account.number,
+              accountType: account.type,
+              materializedBalanceCents: account.balanceCents.toString(),
+              ledgerBalanceCents: ledgerBalanceCents.toString(),
+            },
+          ];
     });
+    const totalBalanceCents = accounts.reduce((total, account) => total + account.balanceCents, 0n);
     return {
-      balanced: debits === credits && discrepancies.length === 0,
-      debitTotalCents: debits.toString(),
-      creditTotalCents: credits.toString(),
-      discrepancies,
-      checkedAccounts: accounts.length,
+      balanced: debits === credits && mismatchedAccounts.length === 0 && totalBalanceCents === 0n,
+      totalDebitsCents: debits.toString(),
+      totalCreditsCents: credits.toString(),
+      mismatchedAccounts,
     };
   }
 }

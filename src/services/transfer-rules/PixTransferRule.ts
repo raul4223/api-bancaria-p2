@@ -6,13 +6,22 @@ import type { TransferContext, TransferRule, TransferRuleConfig } from './Transf
 // Aplicar o limite noturno de transferências Pix
 export class PixTransferRule implements TransferRule {
   // Receber configurações bancárias e um relógio substituível
-  constructor(private readonly config: TransferRuleConfig, private readonly clock: Clock = systemClock) {}
+  constructor(
+    private readonly config: TransferRuleConfig,
+    private readonly clock: Clock = systemClock,
+  ) {}
 
   // Recusar valores acima do limite durante o período noturno
   validate(context: TransferContext): void {
     const date = this.clock.now();
-    const isNight = isNightTime(date, this.config.bankTimezone, this.config.pixNightStart, this.config.pixNightEnd);
-    if (isNight && context.amountCents > this.config.pixNightLimitCents) throw appErrors.pixNightLimit();
+    const isNight = isNightTime(
+      date,
+      this.config.bankTimezone,
+      this.config.pixNightStart,
+      this.config.pixNightEnd,
+    );
+    if (isNight && context.amountCents > this.config.pixNightLimitCents)
+      throw appErrors.pixNightLimit();
   }
 
   // Não cobrar tarifa em transferências Pix
