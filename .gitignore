@@ -10,3 +10,6 @@ tmp/
 
 # Material do professor (não redistribuir)
 *.pdf
+
+# Prompt de geração (mantido só localmente)
+PROMPT_CODEX_*.md
