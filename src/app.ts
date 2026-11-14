@@ -22,6 +22,11 @@ const healthHandler = async (_req: Request, res: Response) => {
   }
 };
 
+// Responder rotas inexistentes no mesmo formato de erro da API
+const notFoundHandler = (_req: Request, res: Response) => {
+  res.status(404).json({ error: { code: 'ROUTE_NOT_FOUND', message: 'Rota não encontrada.' } });
+};
+
 // Criar Express com segurança, limite de entrada, rotas e documentação
 export const app = express();
 app.disable('x-powered-by');
@@ -34,4 +39,5 @@ app.get('/health', healthHandler);
 app.get('/openapi.json', (_req, res) => res.status(200).json(openApiDocument));
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
 app.use('/api/v1', apiRoutes);
+app.use(notFoundHandler);
 app.use(errorMiddleware);
