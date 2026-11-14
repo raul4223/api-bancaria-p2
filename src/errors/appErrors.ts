@@ -29,7 +29,7 @@ export const appErrors = {
   invalidAmount: () =>
     new AppError(422, 'INVALID_AMOUNT', 'O valor deve ser positivo em centavos.'),
   idempotencyConflict: () =>
-    new AppError(409, 'IDEMPOTENCY_CONFLICT', 'Chave de idempotência usada com outros dados.'),
+    new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'Chave de idempotência usada com outros dados.'),
   pixKeyNotFound: () => new AppError(404, 'PIX_KEY_NOT_FOUND', 'Chave Pix não encontrada.'),
   pixKeyConflict: () => new AppError(409, 'PIX_KEY_ALREADY_EXISTS', 'Chave Pix já cadastrada.'),
   pixKeyLimit: () =>
