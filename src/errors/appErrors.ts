@@ -56,4 +56,6 @@ export const appErrors = {
     new AppError(422, 'DAILY_LIMIT_EXCEEDED', 'Limite diário de transferências atingido.'),
   tedSameOwner: () =>
     new AppError(422, 'TED_SAME_OWNER_USE_INTERNAL', 'Para contas do mesmo titular use INTERNAL.'),
+  destinationUnavailable: () =>
+    new AppError(422, 'DESTINATION_UNAVAILABLE', 'A conta de destino não pode receber.'),
 };

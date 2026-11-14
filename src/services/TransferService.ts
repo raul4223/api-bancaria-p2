@@ -93,7 +93,10 @@ export class TransferService {
     if (!destination.customerId || destination.type === 'SYSTEM')
       throw appErrors.destinationNotFound();
     if (destination.id === source.id) throw appErrors.sameAccount();
-    if (destination.status !== 'ACTIVE') throw appErrors.accountBlocked();
+    if (destination.status !== 'ACTIVE')
+      throw destination.customerId === context.customerId
+        ? appErrors.accountBlocked()
+        : appErrors.destinationUnavailable();
 
     const rule = getTransferRule(resolved.transferType, this.clock);
     const transferContext = {
@@ -137,8 +140,11 @@ export class TransferService {
           !currentDestination.customerId
         )
           throw appErrors.destinationNotFound();
-        if (currentSource.status !== 'ACTIVE' || currentDestination.status !== 'ACTIVE')
-          throw appErrors.accountBlocked();
+        if (currentSource.status !== 'ACTIVE') throw appErrors.accountBlocked();
+        if (currentDestination.status !== 'ACTIVE')
+          throw currentDestination.customerId === context.customerId
+            ? appErrors.accountBlocked()
+            : appErrors.destinationUnavailable();
         if (resolved.transferType === 'PIX') {
           const currentKey = await this.pixKeyRepository.findByValue(
             normalizePixKey(resolved.pixKey),
@@ -166,7 +172,9 @@ export class TransferService {
         if (!(await this.accountRepository.debit(currentSource.id, totalDebit, tx)))
           throw appErrors.insufficientFunds();
         if (!(await this.accountRepository.credit(currentDestination.id, amountCents, tx)))
-          throw appErrors.accountBlocked();
+          throw currentDestination.customerId === context.customerId
+            ? appErrors.accountBlocked()
+            : appErrors.destinationUnavailable();
 
         const ledgerEntries = [
           {

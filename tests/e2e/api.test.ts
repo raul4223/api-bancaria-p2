@@ -906,6 +906,7 @@ describe('API bancária simulada', () => {
       randomUUID(),
     );
     expect(blockedDestination.status).toBe(422);
+    expect(blockedDestination.body.error.code).toBe('DESTINATION_UNAVAILABLE');
     expect(
       (await patch(`${apiBase}/accounts/${accountB1Number}/status`, { status: 'ACTIVE' })).status,
     ).toBe(200);
