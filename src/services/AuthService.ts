@@ -20,4 +20,9 @@ export class AuthService {
       operator: { id: user.id, name: user.name, email: user.email },
     };
   }
+
+  // Conferir se o operador do token continua ativo
+  async isOperatorActive(operatorUserId: string): Promise<boolean> {
+    return (await this.userRepository.findActiveById(operatorUserId)) !== null;
+  }
 }

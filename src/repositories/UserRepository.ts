@@ -6,4 +6,9 @@ export class UserRepository {
   findActiveByEmail(email: string) {
     return prisma.user.findFirst({ where: { email: email.toLowerCase(), isActive: true } });
   }
+
+  // Buscar operador ativo pelo ID gravado no token
+  findActiveById(id: string) {
+    return prisma.user.findFirst({ where: { id, isActive: true }, select: { id: true } });
+  }
 }

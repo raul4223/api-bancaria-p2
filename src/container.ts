@@ -64,4 +64,5 @@ export const container = {
   pixKeyController: new PixKeyController(pixKeyService),
   beneficiaryController: new BeneficiaryController(beneficiaryService),
   serviceSessionService,
+  authService,
 };
