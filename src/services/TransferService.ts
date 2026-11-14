@@ -1,4 +1,5 @@
 import { AppError } from '../errors/AppError.js';
+import { env } from '../config/env.js';
 import { appErrors } from '../errors/appErrors.js';
 import { AccountRepository } from '../repositories/AccountRepository.js';
 import { BeneficiaryRepository } from '../repositories/BeneficiaryRepository.js';
@@ -12,6 +13,7 @@ import { parseCents } from '../utils/money.js';
 import { normalizePixKey } from '../utils/pixKey.js';
 import { maskAccountNumber, maskName } from '../utils/mask.js';
 import { customerAgency } from '../utils/bankAccount.js';
+import { getBankDayStart } from '../utils/bankTime.js';
 
 type TransferInput =
   | {
@@ -146,6 +148,19 @@ export class TransferService {
             throw appErrors.pixKeyNotFound();
         }
         rule.validate({ ...transferContext, destinationCustomerId: currentDestination.customerId });
+
+        if (resolved.transferType !== 'INTERNAL') {
+          await this.accountRepository.lockCustomerAccounts(context.customerId, tx);
+          const since = getBankDayStart(this.clock.now(), env.bankTimezone);
+          const sent = await this.transactionRepository.sumOutgoingTransfers(
+            context.customerId,
+            since,
+            transaction.id,
+            tx,
+          );
+          if (sent + amountCents > env.dailyTransferLimitCents)
+            throw appErrors.dailyLimitExceeded();
+        }
 
         const totalDebit = amountCents + feeCents;
         if (!(await this.accountRepository.debit(currentSource.id, totalDebit, tx)))

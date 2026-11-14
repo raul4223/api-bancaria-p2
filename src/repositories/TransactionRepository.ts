@@ -72,6 +72,26 @@ export class TransactionRepository {
     });
   }
 
+  // Somar PIX e TED enviados pelas contas do cliente desde o início do dia bancário
+  async sumOutgoingTransfers(
+    customerId: string,
+    since: Date,
+    excludeTransactionId: string,
+    client: DatabaseClient,
+  ): Promise<bigint> {
+    const result = await client.bankTransaction.aggregate({
+      _sum: { amountCents: true },
+      where: {
+        id: { not: excludeTransactionId },
+        type: 'TRANSFER',
+        transferType: { in: ['PIX', 'TED'] },
+        createdAt: { gte: since },
+        sourceAccount: { customerId },
+      },
+    });
+    return result._sum.amountCents ?? 0n;
+  }
+
   // Agrupar partidas por conta e direção para conciliação
   groupLedger() {
     return prisma.ledgerEntry.groupBy({

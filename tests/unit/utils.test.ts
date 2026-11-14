@@ -5,6 +5,7 @@ import { isCustomerPassword, isWeakCustomerPassword } from '../../src/utils/cust
 import { isValidPixEmail, normalizePixKey, toPixPhone } from '../../src/utils/pixKey.js';
 import {
   getBankDate,
+  getBankDayStart,
   isBusinessDay,
   isNightTime,
   isWithinTimeRange,
@@ -89,6 +90,23 @@ describe('horários bancários', () => {
     expect(
       isNightTime(new Date('2026-11-10T02:30:00.000Z'), 'America/Sao_Paulo', '20:00', '06:00'),
     ).toBe(true);
+  });
+});
+
+describe('início do dia bancário', () => {
+  it('calcula o começo do dia em São Paulo a partir de um instante UTC', () => {
+    const start = getBankDayStart(new Date('2026-11-14T15:00:00.000Z'), 'America/Sao_Paulo');
+    expect(start.toISOString()).toBe('2026-11-14T03:00:00.000Z');
+  });
+
+  it('mantém o dia anterior quando o instante UTC já é o dia seguinte, mas ainda é madrugada local', () => {
+    const start = getBankDayStart(new Date('2026-11-15T02:30:00.000Z'), 'America/Sao_Paulo');
+    expect(start.toISOString()).toBe('2026-11-14T03:00:00.000Z');
+  });
+
+  it('devolve o próprio início do dia quando o instante já é a meia-noite local', () => {
+    const start = getBankDayStart(new Date('2026-11-14T03:00:00.000Z'), 'America/Sao_Paulo');
+    expect(start.toISOString()).toBe('2026-11-14T03:00:00.000Z');
   });
 });
 
