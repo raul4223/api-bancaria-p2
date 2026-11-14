@@ -488,6 +488,15 @@ if (transferOperation?.requestBody && 'content' in transferOperation.requestBody
             destinationAccountNumber: '7654321',
           },
         },
+        beneficiary: {
+          summary: 'Transferência para um favorecido da agenda',
+          value: {
+            transferType: 'BENEFICIARY',
+            sourceAccountNumber: '1234567',
+            beneficiaryId: '00000000-0000-4000-8000-000000000000',
+            amountCents: '1500',
+          },
+        },
         internal: {
           summary: 'Transferência entre contas do titular',
           value: {

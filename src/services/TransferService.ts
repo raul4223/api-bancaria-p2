@@ -1,6 +1,7 @@
 import { AppError } from '../errors/AppError.js';
 import { appErrors } from '../errors/appErrors.js';
 import { AccountRepository } from '../repositories/AccountRepository.js';
+import { BeneficiaryRepository } from '../repositories/BeneficiaryRepository.js';
 import { PixKeyRepository } from '../repositories/PixKeyRepository.js';
 import { TransactionRepository } from '../repositories/TransactionRepository.js';
 import { TransactionService } from './TransactionService.js';
@@ -34,7 +35,16 @@ type TransferInput =
       destinationAccountNumber: string;
       amountCents: string;
       description?: string | undefined;
+    }
+  | {
+      transferType: 'BENEFICIARY';
+      sourceAccountNumber: string;
+      beneficiaryId: string;
+      amountCents: string;
+      description?: string | undefined;
     };
+
+type DirectTransferInput = Exclude<TransferInput, { transferType: 'BENEFICIARY' }>;
 
 type TransferContext = {
   customerId: string;
@@ -51,6 +61,7 @@ export class TransferService {
     private readonly pixKeyRepository: PixKeyRepository,
     private readonly transactionRepository: TransactionRepository,
     private readonly transactionService: TransactionService,
+    private readonly beneficiaryRepository: BeneficiaryRepository,
     private readonly clock: Clock = systemClock,
   ) {}
 
@@ -64,23 +75,27 @@ export class TransferService {
       fingerprintPayload,
     );
     if (replay) return replay;
+    const resolved =
+      input.transferType === 'BENEFICIARY'
+        ? await this.resolveBeneficiary(input, context.customerId)
+        : input;
     const source = await this.accountRepository.findByNumberForCustomer(
       customerAgency,
-      input.sourceAccountNumber,
+      resolved.sourceAccountNumber,
       context.customerId,
     );
     if (!source) throw appErrors.notFound('Conta de origem');
     if (source.status !== 'ACTIVE') throw appErrors.accountBlocked();
 
-    const destination = await this.resolveDestination(input);
+    const destination = await this.resolveDestination(resolved);
     if (!destination.customerId || destination.type === 'SYSTEM')
       throw appErrors.destinationNotFound();
     if (destination.id === source.id) throw appErrors.sameAccount();
     if (destination.status !== 'ACTIVE') throw appErrors.accountBlocked();
 
-    const rule = getTransferRule(input.transferType, this.clock);
+    const rule = getTransferRule(resolved.transferType, this.clock);
     const transferContext = {
-      transferType: input.transferType,
+      transferType: resolved.transferType,
       amountCents,
       sourceCustomerId: context.customerId,
       destinationCustomerId: destination.customerId,
@@ -89,20 +104,21 @@ export class TransferService {
     };
     rule.validate(transferContext);
     const feeCents = rule.calculateFee(amountCents);
-    const pixKeyUsed = input.transferType === 'PIX' ? normalizePixKey(input.pixKey) : undefined;
+    const pixKeyUsed =
+      resolved.transferType === 'PIX' ? normalizePixKey(resolved.pixKey) : undefined;
 
     return this.transactionService.executeIdempotent(
       {
         operatorUserId: context.operatorUserId,
         serviceSessionId: context.serviceSessionId,
         type: 'TRANSFER',
-        transferType: input.transferType,
+        transferType: resolved.transferType,
         amountCents,
         feeCents,
         sourceAccountId: source.id,
         destinationAccountId: destination.id,
         ...(pixKeyUsed ? { pixKeyUsed } : {}),
-        ...(input.description ? { description: input.description } : {}),
+        ...(resolved.description ? { description: resolved.description } : {}),
         idempotencyKey: context.idempotencyKey,
         fingerprintPayload,
       },
@@ -121,9 +137,9 @@ export class TransferService {
           throw appErrors.destinationNotFound();
         if (currentSource.status !== 'ACTIVE' || currentDestination.status !== 'ACTIVE')
           throw appErrors.accountBlocked();
-        if (input.transferType === 'PIX') {
+        if (resolved.transferType === 'PIX') {
           const currentKey = await this.pixKeyRepository.findByValue(
-            normalizePixKey(input.pixKey),
+            normalizePixKey(resolved.pixKey),
             tx,
           );
           if (!currentKey || currentKey.accountId !== currentDestination.id)
@@ -178,7 +194,7 @@ export class TransferService {
         return {
           id: transaction.id,
           type: 'TRANSFER',
-          transferType: input.transferType,
+          transferType: resolved.transferType,
           amountCents: amountCents.toString(),
           feeCents: feeCents.toString(),
           sourceAccount: { agency: currentSource.agency, number: currentSource.number },
@@ -193,8 +209,36 @@ export class TransferService {
     );
   }
 
+  // Converter o favorecido do cliente atendido no destino PIX ou TED salvo
+  private async resolveBeneficiary(
+    input: Extract<TransferInput, { transferType: 'BENEFICIARY' }>,
+    customerId: string,
+  ): Promise<DirectTransferInput> {
+    const beneficiary = await this.beneficiaryRepository.findById(input.beneficiaryId, customerId);
+    if (!beneficiary) throw appErrors.notFound('Favorecido');
+    const base = {
+      sourceAccountNumber: input.sourceAccountNumber,
+      amountCents: input.amountCents,
+      ...(input.description ? { description: input.description } : {}),
+    };
+    if (beneficiary.transferType === 'PIX' && beneficiary.pixKey)
+      return { ...base, transferType: 'PIX', pixKey: beneficiary.pixKey };
+    if (
+      beneficiary.transferType === 'TED' &&
+      beneficiary.destinationAgency &&
+      beneficiary.destinationAccountNumber
+    )
+      return {
+        ...base,
+        transferType: 'TED',
+        destinationAgency: beneficiary.destinationAgency,
+        destinationAccountNumber: beneficiary.destinationAccountNumber,
+      };
+    throw appErrors.validation();
+  }
+
   // Resolver destino Pix, TED ou interno sem expor conta SYSTEM
-  private async resolveDestination(input: TransferInput) {
+  private async resolveDestination(input: DirectTransferInput) {
     if (input.transferType === 'PIX') {
       const key = await this.pixKeyRepository.findByValue(normalizePixKey(input.pixKey));
       if (!key) throw appErrors.pixKeyNotFound();

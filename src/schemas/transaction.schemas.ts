@@ -49,6 +49,13 @@ export const transferSchema = z.discriminatedUnion('transferType', [
     amountCents: amountSchema,
     description: z.string().trim().max(240).optional(),
   }),
+  z.object({
+    transferType: z.literal('BENEFICIARY'),
+    sourceAccountNumber: accountNumberSchema,
+    beneficiaryId: z.string().uuid(),
+    amountCents: amountSchema,
+    description: z.string().trim().max(240).optional(),
+  }),
 ]);
 
 // Validar filtros e paginação de extrato de uma conta
