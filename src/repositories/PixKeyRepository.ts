@@ -22,7 +22,7 @@ export class PixKeyRepository {
   findMany(customerId: string, skip: number, take: number) {
     return prisma.pixKey.findMany({
       where: { customerId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip,
       take,
     });

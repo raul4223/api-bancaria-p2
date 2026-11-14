@@ -12,7 +12,7 @@ export class BeneficiaryRepository {
   findMany(customerId: string, skip: number, take: number) {
     return prisma.beneficiary.findMany({
       where: { customerId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip,
       take,
     });
