@@ -338,13 +338,20 @@ export class TransactionService {
           direction: isSource ? 'DEBIT' : 'CREDIT',
           amountCents: transaction.amountCents.toString(),
           feeCents: transaction.feeCents.toString(),
-          counterparty: counterpartyAccount
-            ? {
-                agency: counterpartyAccount.agency,
-                number: maskAccountNumber(counterpartyAccount.number),
-                name: maskName(counterpartyAccount.customer?.name ?? 'Conta do banco'),
-              }
-            : null,
+          counterparty:
+            counterpartyAccount?.type === 'SYSTEM'
+              ? {
+                  agency: null,
+                  number: null,
+                  name: transaction.type === 'DEPOSIT' ? 'Depósito em espécie' : 'Saque em espécie',
+                }
+              : counterpartyAccount
+                ? {
+                    agency: counterpartyAccount.agency,
+                    number: maskAccountNumber(counterpartyAccount.number),
+                    name: maskName(counterpartyAccount.customer?.name ?? 'Conta do banco'),
+                  }
+                : null,
           operator: transaction.operator,
           createdAt: transaction.createdAt.toISOString(),
         };

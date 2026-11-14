@@ -59,11 +59,16 @@ export const transferSchema = z.discriminatedUnion('transferType', [
 ]);
 
 // Validar filtros e paginação de extrato de uma conta
-export const statementQuerySchema = paginationSchema.extend({
-  from: z.iso.datetime().optional(),
-  to: z.iso.datetime().optional(),
-  type: z.enum(['DEPOSIT', 'WITHDRAWAL', 'TRANSFER']).optional(),
-  transferType: z.enum(['PIX', 'TED', 'INTERNAL']).optional(),
-});
+export const statementQuerySchema = paginationSchema
+  .extend({
+    from: z.iso.datetime().optional(),
+    to: z.iso.datetime().optional(),
+    type: z.enum(['DEPOSIT', 'WITHDRAWAL', 'TRANSFER']).optional(),
+    transferType: z.enum(['PIX', 'TED', 'INTERNAL']).optional(),
+  })
+  .refine((query) => !query.from || !query.to || new Date(query.from) <= new Date(query.to), {
+    message: 'A data inicial deve ser anterior à final',
+    path: ['to'],
+  });
 
 export { accountNumberParamsSchema };
