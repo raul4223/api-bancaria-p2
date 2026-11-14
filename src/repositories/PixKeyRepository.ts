@@ -6,13 +6,16 @@ type DatabaseClient = Prisma.TransactionClient | typeof prisma;
 // Repository que acessa as chaves Pix registradas pelos clientes
 export class PixKeyRepository {
   // Criar chave Pix associada ao cliente e à conta
-  create(data: {
-    customerId: string;
-    accountId: string;
-    keyType: 'CPF' | 'EMAIL' | 'PHONE' | 'RANDOM';
-    keyValue: string;
-  }) {
-    return prisma.pixKey.create({ data });
+  create(
+    data: {
+      customerId: string;
+      accountId: string;
+      keyType: 'CPF' | 'EMAIL' | 'PHONE' | 'RANDOM';
+      keyValue: string;
+    },
+    client: DatabaseClient = prisma,
+  ) {
+    return client.pixKey.create({ data });
   }
 
   // Listar chaves Pix do cliente do atendimento
@@ -44,13 +47,13 @@ export class PixKeyRepository {
   }
 
   // Contar chaves ligadas à conta do cliente
-  countByAccount(accountId: string, customerId: string) {
-    return prisma.pixKey.count({ where: { accountId, customerId } });
+  countByAccount(accountId: string, customerId: string, client: DatabaseClient = prisma) {
+    return client.pixKey.count({ where: { accountId, customerId } });
   }
 
   // Mover chave para outra conta do mesmo cliente atendido
-  update(id: string, customerId: string, accountId: string) {
-    return prisma.pixKey.updateMany({ where: { id, customerId }, data: { accountId } });
+  update(id: string, customerId: string, accountId: string, client: DatabaseClient = prisma) {
+    return client.pixKey.updateMany({ where: { id, customerId }, data: { accountId } });
   }
 
   // Excluir chave pertencente ao cliente do atendimento

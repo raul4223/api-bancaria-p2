@@ -102,4 +102,9 @@ export class AccountRepository {
   async lockCustomerAccounts(customerId: string, client: DatabaseClient): Promise<void> {
     await client.$queryRaw`SELECT id FROM Account WHERE customerId = ${customerId} FOR UPDATE`;
   }
+
+  // Travar a conta até o fim da transação
+  async lockById(id: string, client: DatabaseClient): Promise<void> {
+    await client.$queryRaw`SELECT id FROM Account WHERE id = ${id} FOR UPDATE`;
+  }
 }
