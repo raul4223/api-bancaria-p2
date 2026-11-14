@@ -4,7 +4,7 @@ import { appErrors } from '../errors/appErrors.js';
 import { AccountRepository } from '../repositories/AccountRepository.js';
 import { CustomerRepository } from '../repositories/CustomerRepository.js';
 import { PixKeyRepository } from '../repositories/PixKeyRepository.js';
-import { isValidPixEmail, isValidPixPhone, normalizePixKey } from '../utils/pixKey.js';
+import { isValidPixEmail, normalizePixKey, toPixPhone } from '../utils/pixKey.js';
 import { env } from '../config/env.js';
 import { customerAgency } from '../utils/bankAccount.js';
 
@@ -45,8 +45,11 @@ export class PixKeyService {
     }
     if (input.keyType === 'EMAIL' && (!keyValue || !isValidPixEmail(keyValue)))
       throw appErrors.validation();
-    if (input.keyType === 'PHONE' && (!keyValue || !isValidPixPhone(keyValue)))
-      throw appErrors.validation();
+    if (input.keyType === 'PHONE') {
+      const phone = toPixPhone(input.keyValue ?? '');
+      if (phone === null) throw appErrors.validation();
+      keyValue = phone;
+    }
     if (!keyValue) throw appErrors.validation();
     if (
       (await this.pixKeyRepository.countByAccount(account.id, customerId)) >= env.pixKeysPerAccount
