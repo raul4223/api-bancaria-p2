@@ -11,8 +11,9 @@ export class TedTransferRule implements TransferRule {
     private readonly clock: Clock = systemClock,
   ) {}
 
-  // Recusar TED fora do horário configurado em dias úteis
-  validate(_context: TransferContext): void {
+  // Recusar TED para o mesmo titular e fora do horário configurado em dias úteis
+  validate(context: TransferContext): void {
+    if (context.destinationCustomerId === context.sourceCustomerId) throw appErrors.tedSameOwner();
     if (!this.config.tedBusinessHoursEnabled) return;
     const date = this.clock.now();
     const isOpen = isWithinBusinessHours(

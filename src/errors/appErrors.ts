@@ -54,4 +54,6 @@ export const appErrors = {
     new AppError(422, 'AMOUNT_ABOVE_LIMIT', 'Valor acima do limite por operação.'),
   dailyLimitExceeded: () =>
     new AppError(422, 'DAILY_LIMIT_EXCEEDED', 'Limite diário de transferências atingido.'),
+  tedSameOwner: () =>
+    new AppError(422, 'TED_SAME_OWNER_USE_INTERNAL', 'Para contas do mesmo titular use INTERNAL.'),
 };
