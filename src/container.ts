@@ -5,6 +5,7 @@ import { PixKeyRepository } from './repositories/PixKeyRepository.js';
 import { ServiceSessionRepository } from './repositories/ServiceSessionRepository.js';
 import { TransactionRepository } from './repositories/TransactionRepository.js';
 import { UserRepository } from './repositories/UserRepository.js';
+import { AccountStatusHistoryRepository } from './repositories/AccountStatusHistoryRepository.js';
 import { AccountService } from './services/AccountService.js';
 import { AuthService } from './services/AuthService.js';
 import { BeneficiaryService } from './services/BeneficiaryService.js';
@@ -30,14 +31,19 @@ const accountRepository = new AccountRepository();
 const transactionRepository = new TransactionRepository();
 const pixKeyRepository = new PixKeyRepository();
 const beneficiaryRepository = new BeneficiaryRepository();
+const accountStatusHistoryRepository = new AccountStatusHistoryRepository();
 
 const authService = new AuthService(userRepository);
 const serviceSessionService = new ServiceSessionService(
   serviceSessionRepository,
   customerRepository,
 );
-const accountService = new AccountService(accountRepository);
-const customerService = new CustomerService(customerRepository, accountService);
+const accountService = new AccountService(accountRepository, accountStatusHistoryRepository);
+const customerService = new CustomerService(
+  customerRepository,
+  accountService,
+  serviceSessionRepository,
+);
 const transactionService = new TransactionService(transactionRepository, accountRepository);
 const transferService = new TransferService(
   accountRepository,

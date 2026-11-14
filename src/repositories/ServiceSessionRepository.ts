@@ -1,6 +1,8 @@
 import { prisma } from '../database/prisma.js';
 import type { Prisma } from '../generated/prisma/client.ts';
 
+type DatabaseClient = Prisma.TransactionClient | typeof prisma;
+
 // Repository que registra atendimentos e tentativas de senha
 export class ServiceSessionRepository {
   // Criar atendimento associado ao operador e ao cliente
@@ -40,24 +42,32 @@ export class ServiceSessionRepository {
     });
   }
 
-  // Acrescentar tentativa inválida e aplicar bloqueio temporário
+  // Registrar tentativa inválida de forma atômica e bloquear ao atingir o limite
   async incrementFailedAttempts(
     customerId: string,
+    now: Date,
     maxAttempts: number,
     lockMinutes: number,
   ): Promise<number> {
     return prisma.$transaction(async (tx) => {
-      const customer = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
-      const nextAttempts = customer.failedPasswordAttempts + 1;
-      await tx.customer.update({
-        where: { id: customerId },
-        data: {
-          failedPasswordAttempts: nextAttempts,
-          passwordLockedUntil:
-            nextAttempts >= maxAttempts ? new Date(Date.now() + lockMinutes * 60_000) : null,
-        },
+      // Recomeçar a contagem quando o bloqueio anterior já venceu
+      await tx.customer.updateMany({
+        where: { id: customerId, passwordLockedUntil: { lte: now } },
+        data: { failedPasswordAttempts: 0, passwordLockedUntil: null },
       });
-      return nextAttempts;
+      // O incremento relativo trava a linha e evita perder tentativas simultâneas
+      const customer = await tx.customer.update({
+        where: { id: customerId },
+        data: { failedPasswordAttempts: { increment: 1 } },
+        select: { failedPasswordAttempts: true },
+      });
+      if (customer.failedPasswordAttempts >= maxAttempts) {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { passwordLockedUntil: new Date(now.getTime() + lockMinutes * 60_000) },
+        });
+      }
+      return customer.failedPasswordAttempts;
     });
   }
 
@@ -66,6 +76,23 @@ export class ServiceSessionRepository {
     return prisma.customer.update({
       where: { id: customerId },
       data: { failedPasswordAttempts: 0, passwordLockedUntil: null },
+    });
+  }
+
+  // Buscar o atendimento aberto mais recente do operador
+  findOpenForOperator(operatorUserId: string) {
+    return prisma.serviceSession.findFirst({
+      where: { operatorUserId, status: 'OPEN' },
+      orderBy: { openedAt: 'desc' },
+      include: { customer: true },
+    });
+  }
+
+  // Encerrar todos os atendimentos abertos de um cliente
+  closeOpenForCustomer(customerId: string, closedAt: Date, client: DatabaseClient = prisma) {
+    return client.serviceSession.updateMany({
+      where: { customerId, status: 'OPEN' },
+      data: { status: 'CLOSED', closedAt },
     });
   }
 }

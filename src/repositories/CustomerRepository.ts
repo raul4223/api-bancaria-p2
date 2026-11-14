@@ -16,7 +16,7 @@ export class CustomerRepository {
       where: args.where,
       skip: args.skip,
       take: args.take,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         accounts: {
           select: { agency: true, number: true, type: true, status: true, balanceCents: true },
@@ -49,27 +49,59 @@ export class CustomerRepository {
     return prisma.customer.update({ where: { id }, data });
   }
 
-  // Excluir cliente e suas contas sem movimentação numa única transação
-  delete(id: string) {
-    return prisma.$transaction([
-      prisma.account.deleteMany({ where: { customerId: id } }),
-      prisma.customer.delete({ where: { id } }),
-    ]);
+  // Excluir cliente e suas contas sem movimentação dentro da transação recebida
+  async delete(id: string, client: DatabaseClient) {
+    await client.account.deleteMany({ where: { customerId: id } });
+    await client.customer.delete({ where: { id } });
   }
 
-  // Contar atendimentos, movimentações e saldo das contas antes da exclusão física
-  async getHistorySummary(id: string) {
-    const [sessionCount, transactionCount, ledgerEntryCount, accountsWithBalance] =
-      await Promise.all([
-        prisma.serviceSession.count({ where: { customerId: id } }),
-        prisma.bankTransaction.count({
-          where: {
-            OR: [{ sourceAccount: { customerId: id } }, { destinationAccount: { customerId: id } }],
-          },
-        }),
-        prisma.ledgerEntry.count({ where: { account: { customerId: id } } }),
-        prisma.account.count({ where: { customerId: id, balanceCents: { not: 0n } } }),
-      ]);
-    return { sessionCount, transactionCount, ledgerEntryCount, accountsWithBalance };
+  // Contar atendimentos, movimentações, histórico de status e saldo antes da exclusão física
+  async getHistorySummary(id: string, client: DatabaseClient) {
+    const sessionCount = await client.serviceSession.count({ where: { customerId: id } });
+    const transactionCount = await client.bankTransaction.count({
+      where: {
+        OR: [{ sourceAccount: { customerId: id } }, { destinationAccount: { customerId: id } }],
+      },
+    });
+    const ledgerEntryCount = await client.ledgerEntry.count({
+      where: { account: { customerId: id } },
+    });
+    const accountsWithBalance = await client.account.count({
+      where: { customerId: id, balanceCents: { not: 0n } },
+    });
+    const accountStatusHistoryCount = await client.accountStatusHistory.count({
+      where: { account: { customerId: id } },
+    });
+    return {
+      sessionCount,
+      transactionCount,
+      ledgerEntryCount,
+      accountsWithBalance,
+      accountStatusHistoryCount,
+    };
+  }
+
+  // Travar a linha do cliente até o fim da transação
+  async lockById(id: string, client: DatabaseClient) {
+    await client.$queryRaw`SELECT id FROM Customer WHERE id = ${id} FOR UPDATE`;
+  }
+
+  // Gravar nova senha de atendimento, desbloquear e registrar quem redefiniu
+  updatePassword(
+    id: string,
+    data: { passwordHash: string; changedAt: Date; changedByUserId: string },
+    client: DatabaseClient = prisma,
+  ) {
+    return client.customer.update({
+      where: { id },
+      data: {
+        passwordHash: data.passwordHash,
+        failedPasswordAttempts: 0,
+        passwordLockedUntil: null,
+        passwordChangedAt: data.changedAt,
+        passwordChangedByUserId: data.changedByUserId,
+      },
+      select: { id: true },
+    });
   }
 }

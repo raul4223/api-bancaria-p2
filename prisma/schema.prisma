@@ -64,6 +64,8 @@ model User {
   serviceSessions ServiceSession[]
   transactions    BankTransaction[]
   blockedAccounts Account[]
+  changedCustomerPasswords Customer[]
+  accountStatusChanges     AccountStatusHistory[]
 }
 
 model Customer {
@@ -75,6 +77,9 @@ model Customer {
   passwordHash            String           @db.VarChar(255)
   failedPasswordAttempts  Int              @default(0)
   passwordLockedUntil     DateTime?
+  passwordChangedAt       DateTime?
+  passwordChangedByUserId String?          @db.Char(36)
+  passwordChangedBy       User?            @relation(fields: [passwordChangedByUserId], references: [id], onDelete: Restrict)
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
   serviceSessions         ServiceSession[]
@@ -120,6 +125,7 @@ model Account {
   ledgerEntries       LedgerEntry[]
   sourceTransactions  BankTransaction[] @relation("TransactionSource")
   targetTransactions  BankTransaction[] @relation("TransactionDestination")
+  statusHistory       AccountStatusHistory[]
 
   @@unique([agency, number])
   @@index([customerId, createdAt])
@@ -197,4 +203,18 @@ model Beneficiary {
   customer                 Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
   @@index([customerId, createdAt])
+}
+
+model AccountStatusHistory {
+  id             String        @id @default(uuid()) @db.Char(36)
+  accountId      String        @db.Char(36)
+  operatorUserId String        @db.Char(36)
+  fromStatus     AccountStatus
+  toStatus       AccountStatus
+  reason         String?       @db.VarChar(200)
+  createdAt      DateTime      @default(now())
+  account        Account       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  operator       User          @relation(fields: [operatorUserId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt])
 }

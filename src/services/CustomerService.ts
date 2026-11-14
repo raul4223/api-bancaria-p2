@@ -2,6 +2,7 @@ import { Prisma } from '../generated/prisma/client.ts';
 import { prisma } from '../database/prisma.js';
 import { appErrors } from '../errors/appErrors.js';
 import { CustomerRepository } from '../repositories/CustomerRepository.js';
+import { ServiceSessionRepository } from '../repositories/ServiceSessionRepository.js';
 import { AccountService } from './AccountService.js';
 import { hashPassword } from '../utils/password.js';
 import { maskCpf } from '../utils/mask.js';
@@ -9,10 +10,11 @@ import { omitPasswordHash } from '../utils/presenters.js';
 
 // Service com regras de cadastro, consulta e manutenção de clientes
 export class CustomerService {
-  // Receber o repository de clientes e o service que abre contas
+  // Receber os repositories de clientes e atendimentos e o service que abre contas
   constructor(
     private readonly customerRepository: CustomerRepository,
     private readonly accountService: AccountService,
+    private readonly serviceSessionRepository: ServiceSessionRepository,
   ) {}
 
   // Cadastrar cliente e abrir sua primeira conta numa única transação
@@ -124,8 +126,10 @@ export class CustomerService {
       email?: string | null | undefined;
       phone?: string | null | undefined;
     },
+    sessionCustomerId: string,
   ) {
     const { id: customerId } = await this.findByCpfOrFail(cpf);
+    if (customerId !== sessionCustomerId) throw appErrors.sessionCustomerMismatch();
     try {
       const data: Prisma.CustomerUpdateInput = {};
       if (input.name !== undefined) data.name = input.name;
@@ -140,16 +144,39 @@ export class CustomerService {
     }
   }
 
+  // Redefinir a senha de atendimento no balcão depois da conferência do documento
+  async resetPassword(
+    cpf: string,
+    input: { newCustomerPassword: string; identityConfirmed: true },
+    operatorUserId: string,
+  ): Promise<void> {
+    const { id: customerId } = await this.findByCpfOrFail(cpf);
+    const passwordHash = await hashPassword(input.newCustomerPassword);
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await this.customerRepository.updatePassword(
+        customerId,
+        { passwordHash, changedAt: now, changedByUserId: operatorUserId },
+        tx,
+      );
+      await this.serviceSessionRepository.closeOpenForCustomer(customerId, now, tx);
+    });
+  }
+
   // Excluir cadastro feito por engano: sem atendimentos, movimentações nem saldo
   async delete(cpf: string): Promise<void> {
     const { id: customerId } = await this.findByCpfOrFail(cpf);
-    const history = await this.customerRepository.getHistorySummary(customerId);
-    const hasHistory =
-      history.sessionCount > 0 ||
-      history.transactionCount > 0 ||
-      history.ledgerEntryCount > 0 ||
-      history.accountsWithBalance > 0;
-    if (hasHistory) throw appErrors.customerHasHistory();
-    await this.customerRepository.delete(customerId);
+    await prisma.$transaction(async (tx) => {
+      await this.customerRepository.lockById(customerId, tx);
+      const history = await this.customerRepository.getHistorySummary(customerId, tx);
+      const hasHistory =
+        history.sessionCount > 0 ||
+        history.transactionCount > 0 ||
+        history.ledgerEntryCount > 0 ||
+        history.accountsWithBalance > 0 ||
+        history.accountStatusHistoryCount > 0;
+      if (hasHistory) throw appErrors.customerHasHistory();
+      await this.customerRepository.delete(customerId, tx);
+    });
   }
 }

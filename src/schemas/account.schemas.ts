@@ -9,8 +9,11 @@ export const listAccountsSchema = paginationSchema;
 
 // Validar dados para bloquear ou desbloquear uma conta
 export const updateAccountStatusSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('BLOCKED'), reason: z.string().trim().min(3).max(240) }),
-  z.object({ status: z.literal('ACTIVE') }),
+  z.object({ status: z.literal('BLOCKED'), reason: z.string().trim().min(5).max(200) }),
+  z.object({ status: z.literal('ACTIVE'), reason: z.string().trim().min(5).max(200).optional() }),
 ]);
+
+// Validar paginação do histórico de status de uma conta
+export const listAccountStatusHistorySchema = paginationSchema;
 
 export { accountNumberParamsSchema };

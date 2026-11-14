@@ -4,6 +4,7 @@ import { loginSchema } from '../schemas/auth.schemas.js';
 import {
   createCustomerSchema,
   listCustomersSchema,
+  resetCustomerPasswordSchema,
   updateCustomerSchema,
 } from '../schemas/customer.schemas.js';
 import { openServiceSessionSchema } from '../schemas/service-session.schemas.js';
@@ -15,6 +16,7 @@ import {
   sessionIdParamsSchema,
 } from '../schemas/common.schemas.js';
 import {
+  listAccountStatusHistorySchema,
   listAccountsSchema,
   openAccountSchema,
   updateAccountStatusSchema,
@@ -172,10 +174,24 @@ registerRoute({
   tag: 'Clientes',
   summary: 'Atualizar dados de contato',
   description:
-    'Atualiza nome, e-mail e telefone do cliente identificado pelo CPF. CPF e senha de atendimento não podem ser alterados.',
-  operationType: 'geral',
+    'Atualiza nome, e-mail e telefone do cliente identificado pelo CPF. **Exige o cliente presente:** o atendimento aberto com a senha dele precisa ser do mesmo CPF; atendimento de outro cliente devolve 403 `SERVICE_SESSION_CUSTOMER_MISMATCH`. CPF e senha de atendimento não podem ser alterados aqui.',
+  operationType: 'atendimento',
   params: customerCpfParamsSchema,
   body: updateCustomerSchema,
+  sessionHeader: true,
+});
+registerRoute({
+  method: 'patch',
+  path: '/customers/{cpf}/password',
+  tag: 'Clientes',
+  summary: 'Redefinir a senha de atendimento no balcão',
+  description:
+    'Usado quando o cliente **esqueceu a senha** de 6 dígitos. O operador confere o documento original com foto e envia `identityConfirmed: true` com a nova senha escolhida pelo cliente. A senha é trocada, o bloqueio por tentativas é removido e os atendimentos abertos desse cliente são encerrados. Responde 204 sem corpo.',
+  operationType: 'geral',
+  params: customerCpfParamsSchema,
+  body: resetCustomerPasswordSchema,
+  successCode: 204,
+  noContent: true,
 });
 registerRoute({
   method: 'delete',
@@ -209,6 +225,15 @@ registerRoute({
     'Encerra o atendimento. Depois disso, nenhuma operação em nome do cliente é aceita com esse ID (403).',
   operationType: 'geral',
   params: sessionIdParamsSchema,
+});
+registerRoute({
+  method: 'get',
+  path: '/service-sessions/current',
+  tag: 'Atendimento',
+  summary: 'Consultar o atendimento atual do operador',
+  description:
+    'Devolve o atendimento aberto mais recente do operador autenticado, com o CPF do cliente mascarado. Útil para recuperar o `id` depois de recarregar a tela. Sem atendimento aberto, ou com atendimento vencido, devolve 404.',
+  operationType: 'geral',
 });
 registerRoute({
   method: 'post',
@@ -250,10 +275,21 @@ registerRoute({
   tag: 'Gestão de contas (geral)',
   summary: 'Bloquear ou desbloquear conta pelo número',
   description:
-    '**Gestão do banco (não depende de atendimento):** bloqueia a conta (`{ "status": "BLOCKED", "reason": "..." }`) ou desbloqueia (`{ "status": "ACTIVE" }`). Conta bloqueada não envia nem recebe dinheiro. Usado, por exemplo, em suspeita de fraude.',
+    '**Gestão do banco (não depende de atendimento):** bloqueia a conta (`{ "status": "BLOCKED", "reason": "..." }`, motivo de 5 a 200 caracteres) ou desbloqueia (`{ "status": "ACTIVE" }`, motivo opcional). Conta bloqueada não envia nem recebe dinheiro. Usado, por exemplo, em suspeita de fraude. Repetir o status atual devolve 422 `ACCOUNT_STATUS_UNCHANGED`. Cada mudança fica registrada no histórico de status.',
   operationType: 'geral',
   params: accountNumberParamsSchema,
   body: updateAccountStatusSchema,
+});
+registerRoute({
+  method: 'get',
+  path: '/accounts/{accountNumber}/status-history',
+  tag: 'Gestão de contas (geral)',
+  summary: 'Consultar histórico de bloqueios da conta',
+  description:
+    'Lista, paginado e do mais recente para o mais antigo, cada bloqueio e desbloqueio da conta: status anterior, novo status, motivo, data e operador responsável.',
+  operationType: 'geral',
+  params: accountNumberParamsSchema,
+  query: listAccountStatusHistorySchema,
 });
 registerRoute({
   method: 'get',

@@ -15,6 +15,7 @@ serviceSessionRoutes.post(
   validate({ body: openServiceSessionSchema }),
   container.serviceSessionController.open,
 );
+serviceSessionRoutes.get('/current', container.serviceSessionController.getCurrent);
 serviceSessionRoutes.patch(
   '/:serviceSessionId/close',
   validate({ params: sessionIdParamsSchema }),

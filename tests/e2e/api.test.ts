@@ -137,6 +137,7 @@ async function clearTestDatabase(): Promise<void> {
   await prisma.pixKey.deleteMany();
   await prisma.beneficiary.deleteMany();
   await prisma.serviceSession.deleteMany();
+  await prisma.accountStatusHistory.deleteMany();
   await prisma.account.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.user.deleteMany();
@@ -303,9 +304,24 @@ describe('API bancária simulada', () => {
     expect(detail.body.cpf).toBe('52998224725');
     expect(detail.body).not.toHaveProperty('passwordHash');
 
-    const updated = await patch(`${apiBase}/customers/${cpfA}`, {
+    const updateWithoutSession = await patch(`${apiBase}/customers/${cpfA}`, {
       name: 'Cliente A Atualizado',
     });
+    expect(updateWithoutSession.status).toBe(401);
+    const sessionOfB = await openSession(cpfB, '847291');
+    const updateWithOtherCustomer = await patch(
+      `${apiBase}/customers/${cpfA}`,
+      { name: 'Cliente A Atualizado' },
+      sessionOfB,
+    );
+    expect(updateWithOtherCustomer.status).toBe(403);
+    expect(updateWithOtherCustomer.body.error.code).toBe('SERVICE_SESSION_CUSTOMER_MISMATCH');
+    const sessionOfA = await openSession(cpfA, '291847');
+    const updated = await patch(
+      `${apiBase}/customers/${cpfA}`,
+      { name: 'Cliente A Atualizado' },
+      sessionOfA,
+    );
     expect(updated.status).toBe(200);
     expect(updated.body.name).toBe('Cliente A Atualizado');
 
@@ -1122,9 +1138,9 @@ describe('API bancária simulada', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     env.tedBusinessHoursEnabled = true;
     try {
-      expect(
-        (await patch(`${apiBase}/accounts/${accountB1Number}/status`, { status: 'ACTIVE' })).status,
-      ).toBe(200);
+      expect((await prisma.account.findUniqueOrThrow({ where: { id: accountB1Id } })).status).toBe(
+        'ACTIVE',
+      );
 
       // Sábado, 12:00 em São Paulo: TED recusada por não ser dia útil
       await travelTo('2026-11-07T15:00:00Z');
@@ -1186,7 +1202,7 @@ describe('API bancária simulada', () => {
     const operations = Object.values(
       response.body.paths as Record<string, Record<string, unknown>>,
     ).flatMap((path) => Object.keys(path));
-    expect(operations).toHaveLength(30);
+    expect(operations).toHaveLength(33);
     expect(response.body.components.securitySchemes.bearerAuth).toBeDefined();
     expect(response.body.components.securitySchemes.serviceSession).toBeDefined();
     expect(

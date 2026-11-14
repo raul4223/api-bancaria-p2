@@ -23,7 +23,7 @@ export class AccountRepository {
   findMany(customerId: string, skip: number, take: number) {
     return prisma.account.findMany({
       where: { customerId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip,
       take,
     });
@@ -89,8 +89,8 @@ export class AccountRepository {
   }
 
   // Alterar bloqueio ou desbloqueio com registro do operador
-  updateStatus(id: string, data: Prisma.AccountUpdateInput) {
-    return prisma.account.update({ where: { id }, data });
+  updateStatus(id: string, data: Prisma.AccountUpdateInput, client: DatabaseClient = prisma) {
+    return client.account.update({ where: { id }, data });
   }
 
   // Localizar conta SYSTEM para registrar contrapartidas

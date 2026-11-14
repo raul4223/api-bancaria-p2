@@ -6,14 +6,19 @@ Este projeto é uma simulação acadêmica. Nenhum fluxo acessa bancos, o Banco 
 
 - Só o operador master, criado pelo seed, autentica na API com JWT. Não existe rota de cadastro de operadores.
 - O cliente não recebe JWT. O operador informa CPF e senha de atendimento em `POST /api/v1/service-sessions`; a resposta não revela hash e mascara o CPF.
-- A senha tem seis dígitos, é armazenada com Argon2id e não pode ser repetida (`111111`) nem sequencial (`123456` ou `654321`). Após cinco erros consecutivos, novas tentativas ficam bloqueadas por 15 minutos. Um acerto zera a contagem.
+- A senha tem seis dígitos, é armazenada com Argon2id e não pode ser repetida (`111111`) nem sequencial (`123456` ou `654321`). Após cinco erros consecutivos, novas tentativas ficam bloqueadas por 15 minutos. Um acerto zera a contagem. Quando o bloqueio vence, a contagem recomeça do zero: um único erro depois disso não bloqueia de novo. Cada erro é somado de forma atômica no banco, então tentativas simultâneas não se perdem.
+- **Senha esquecida (reset no balcão):** `PATCH /api/v1/customers/{cpf}/password` exige só o JWT, porque o cliente não lembra a senha. O operador confere o documento original com foto e envia `identityConfirmed: true` com a nova senha escolhida pelo cliente (mesmas regras de senha fraca). Numa única transação, a senha é trocada, o bloqueio por tentativas é removido, ficam registrados data e operador da troca (`passwordChangedAt`, `passwordChangedByUserId`) e os atendimentos abertos desse cliente são encerrados. Resposta 204, sem devolver hash.
+- `GET /api/v1/service-sessions/current` devolve o atendimento aberto mais recente do operador, com CPF mascarado. Se ele já venceu, é marcado como `EXPIRED` e a resposta é 404.
 - O atendimento dura 30 minutos por padrão. Um novo atendimento do mesmo operador encerra o anterior. Toda operação em nome do cliente exige um atendimento aberto, não expirado e pertencente ao operador do JWT.
 - O `customerId` é obtido do atendimento, nunca do corpo da requisição. IDs de contas, chaves e favorecidos de outro cliente retornam 404.
-- Redefinição de senha, recuperação de acesso e conferência documental não fazem parte desta versão.
+- Recuperação de acesso pelo próprio cliente (fora do balcão) não faz parte desta versão; a conferência documental é declarada pelo operador no reset de senha.
 
 ## Identificação de clientes e contas
 
-- Exclusão de cliente (`DELETE /api/v1/customers/{cpf}`) serve só para cadastro feito por engano: remove o cliente e a conta aberta no cadastro quando ele **nunca teve atendimento, nenhuma conta foi movimentada (nem recebendo transferências) e todos os saldos são zero**. Com qualquer histórico a API devolve 409 `CUSTOMER_HAS_HISTORY`, preservando ledger e auditoria.
+- **Consultar o cadastro é um poder do operador; alterar o contato exige o cliente presente.** `GET /api/v1/customers` e `GET /api/v1/customers/{cpf}` exigem só o JWT. Já `PATCH /api/v1/customers/{cpf}` (nome, e-mail, telefone) exige um atendimento aberto com a senha do **mesmo** cliente; atendimento de outro cliente devolve 403 `SERVICE_SESSION_CUSTOMER_MISMATCH`. Isso impede a troca do contato sem o titular, golpe comum contra idosos.
+- O telefone aceita máscara, mas só dígitos são gravados: DDD + número, 10 ou 11 dígitos. Letras são recusadas com 422.
+
+- Exclusão de cliente (`DELETE /api/v1/customers/{cpf}`) serve só para cadastro feito por engano: remove o cliente e a conta aberta no cadastro quando ele **nunca teve atendimento, nenhuma conta foi movimentada (nem recebendo transferências) e todos os saldos são zero**. Com qualquer histórico (inclusive bloqueio ou desbloqueio de conta) a API devolve 409 `CUSTOMER_HAS_HISTORY`, preservando ledger e auditoria. A conferência e a exclusão acontecem na mesma transação, com a linha do cliente travada.
 
 - No balcão, o funcionário identifica o cliente pelo **CPF** do documento, não por um código interno. Por isso o CRUD de clientes usa o CPF na rota: `GET`, `PATCH` e `DELETE /api/v1/customers/{cpf}`. O UUID continua como chave interna no banco e nas relações (contas, atendimentos), mas não é exigido nas rotas.
 - A listagem geral mostra o CPF mascarado (`***.982.247-**`) e, para cada cliente, a agência e o número de cada conta, o tipo e o status. O CPF completo aparece só na consulta individual, para o operador conferir com o documento.
@@ -30,7 +35,8 @@ Este projeto é uma simulação acadêmica. Nenhum fluxo acessa bancos, o Banco 
 - Transferência: débito na origem pelo valor mais tarifa, crédito do valor no destino e crédito da tarifa na SYSTEM, quando existir.
 - Débitos, créditos, transação, resultado idempotente e lançamentos de ledger participam de uma única transação Prisma. Uma falha faz rollback de tudo.
 - O ledger registra partidas imutáveis. Para cada movimento, a soma dos débitos é igual à soma dos créditos. A rota de conciliação também compara o saldo de cada conta com seu ledger.
-- Conta bloqueada não envia nem recebe. O admin bloqueia com motivo; a SYSTEM não pode ser bloqueada por rota.
+- Conta bloqueada não envia nem recebe. O admin bloqueia com motivo de 5 a 200 caracteres (no desbloqueio o motivo é opcional); a SYSTEM não pode ser bloqueada por rota. Pedir o status que a conta já tem devolve 422 `ACCOUNT_STATUS_UNCHANGED`.
+- Cada bloqueio e desbloqueio grava uma linha em `AccountStatusHistory` (status anterior, novo status, motivo, operador e data), na mesma transação da mudança. O histórico não é apagado no desbloqueio e pode ser consultado, paginado, em `GET /api/v1/accounts/{accountNumber}/status-history`.
 
 ## Tipos de transferência simulada
 
@@ -61,5 +67,5 @@ Os horários usam `BANK_TIMEZONE=America/Sao_Paulo`. O limite noturno do PIX, pa
 ## Limites desta versão
 
 - PIX, TED e INTERNAL são operações no mesmo banco fictício; não há conexão financeira real.
-- Não há feriados, limite PIX acumulado por período, refresh token, recuperação de senha, perfis múltiplos de operador nem conferência de documento.
+- Não há feriados, limite PIX acumulado por período, refresh token, recuperação de senha sem ida ao balcão, perfis múltiplos de operador nem conferência de documento.
 - A API é demonstrativa e não deve ser usada para processar dados reais ou dinheiro real.
