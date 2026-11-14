@@ -28,23 +28,30 @@ Este projeto é uma simulação acadêmica. Nenhum fluxo acessa bancos, o Banco 
 - Contas de clientes não podem ter saldo negativo. Depósito, saque e transferência usam `bigint` em centavos; o débito é um `UPDATE` condicional no banco (`status = ACTIVE` e saldo suficiente). Não se calcula nem se grava um saldo novo a partir de uma leitura em memória.
 - Depósito: débito na SYSTEM e crédito na conta do cliente. Saque: débito no cliente e crédito na SYSTEM.
 - Transferência: débito na origem pelo valor mais tarifa, crédito do valor no destino e crédito da tarifa na SYSTEM, quando existir.
+- **Teto por operação:** depósito, saque e transferência aceitam até `MAX_OPERATION_CENTS` (padrão `100000000`, R$ 1.000.000,00). O formato aceita no máximo 15 dígitos, o que evita estouro do `BIGINT`; acima do teto a API responde 422 `AMOUNT_ABOVE_LIMIT`.
 - Débitos, créditos, transação, resultado idempotente e lançamentos de ledger participam de uma única transação Prisma. Uma falha faz rollback de tudo.
 - O ledger registra partidas imutáveis. Para cada movimento, a soma dos débitos é igual à soma dos créditos. A rota de conciliação também compara o saldo de cada conta com seu ledger.
 - Conta bloqueada não envia nem recebe. O admin bloqueia com motivo; a SYSTEM não pode ser bloqueada por rota.
+- Conta de **origem** bloqueada responde 422 `ACCOUNT_BLOCKED`. Para não revelar o status de uma conta de terceiro, destino bloqueado de **outro** cliente responde 422 `DESTINATION_UNAVAILABLE`; `ACCOUNT_BLOCKED` só aparece quando o destino é do próprio cliente atendido.
 
 ## Tipos de transferência simulada
 
-| Tipo       | Destino                                                    | Regra                                                        | Tarifa padrão |
-| ---------- | ---------------------------------------------------------- | ------------------------------------------------------------ | ------------: |
-| `INTERNAL` | Número de outra conta do mesmo cliente                     | 24 horas; não pode enviar à própria conta                    |       R$ 0,00 |
-| `PIX`      | Chave cadastrada (CPF, e-mail, telefone ou UUID aleatório) | 24/7; limite noturno por operação                            |       R$ 0,00 |
-| `TED`      | Agência e número de conta                                  | Dias úteis, das 06:30 às 17:00 se a regra estiver habilitada |       R$ 5,00 |
+| Tipo       | Destino                                                    | Regra                                                                                                             | Tarifa padrão |
+| ---------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------: |
+| `INTERNAL` | Número de outra conta do mesmo cliente                     | 24 horas; não pode enviar à própria conta                                                                         |       R$ 0,00 |
+| `PIX`      | Chave cadastrada (CPF, e-mail, telefone ou UUID aleatório) | 24/7; limite noturno por operação; limite diário somado                                                           |       R$ 0,00 |
+| `TED`      | Agência e número de conta                                  | Dias úteis, das 06:30 às 17:00 se a regra estiver habilitada; limite diário somado; recusada para o mesmo titular |       R$ 5,00 |
+
+- **Limite diário:** a soma de PIX e TED enviados pelas contas do cliente no dia bancário (fuso `BANK_TIMEZONE`) não pode passar de `DAILY_TRANSFER_LIMIT_CENTS` (padrão `500000`, R$ 5.000,00). Acima disso a API responde 422 `DAILY_LIMIT_EXCEEDED`. `INTERNAL`, depósito e saque não entram na soma. A conferência trava as contas do cliente durante a transação para que operações simultâneas não ultrapassem o limite.
+- **TED para o mesmo titular:** uma TED entre duas contas do mesmo cliente é recusada com 422 `TED_SAME_OWNER_USE_INTERNAL`, porque para isso existe a `INTERNAL`, sem tarifa. PIX para uma chave do próprio cliente continua permitido, como nos bancos reais.
+- **Transferência por favorecido:** o corpo aceita `transferType=BENEFICIARY` com `beneficiaryId`. É só a forma de entrada: o favorecido (do cliente atendido; de outro cliente retorna 404) é convertido em PIX ou TED, a transação é gravada com o tipo real e todas as regras do destino são conferidas de novo.
 
 Os horários usam `BANK_TIMEZONE=America/Sao_Paulo`. O limite noturno do PIX, padrão R$ 1.000,00 entre 20:00 e 06:00, é por transação nesta simplificação; o sistema não agrega operações do período. Feriados não são considerados. `TED_BUSINESS_HOURS_ENABLED=false` permite a demonstração da transferência fora do horário.
 
 ## Chaves Pix e favorecidos
 
-- O valor de cada chave Pix é único no banco. CPF só pode ser o CPF do cliente atendido. Chaves `RANDOM` são UUIDs gerados pelo servidor. Cada conta aceita no máximo cinco chaves.
+- O valor de cada chave Pix é único no banco. CPF só pode ser o CPF do cliente atendido. Chaves `RANDOM` são UUIDs gerados pelo servidor. Cada conta aceita no máximo cinco chaves; a contagem e a criação acontecem na mesma transação, com a conta travada, para que criações simultâneas não passem do limite.
+- **Telefone:** a chave é guardada no formato internacional `+55DDDNÚMERO`, como no DICT real, para não colidir com um CPF de 11 dígitos. Regra resultante: **11 dígitos sem `+` é CPF; telefone é informado com `+55`**. No cadastro, a API converte entradas como `(11) 98765-4321` para `+5511987654321`; numa transferência PIX, a chave de telefone precisa ser informada com o `+`.
 - Uma chave pode ser movida apenas para outra conta ativa do mesmo cliente. Tipo e valor ficam imutáveis.
 - Favorecidos guardam um destino PIX ou TED. O destino precisa existir, estar ativo, não ser SYSTEM e pertencer a outro cliente.
 - Um favorecido salvo não autoriza uma transferência; o destino e suas regras são conferidos novamente na movimentação.
@@ -53,7 +60,7 @@ Os horários usam `BANK_TIMEZONE=America/Sao_Paulo`. O limite noturno do PIX, pa
 ## Idempotência e auditoria
 
 - Depósitos, saques e transferências exigem `Idempotency-Key` em UUID.
-- Mesma chave, operador e payload normalizado devolvem o resultado já gravado com HTTP 200 e não repetem a movimentação. Mesmo operador e chave com outro payload retorna HTTP 409.
+- Mesma chave, operador e payload normalizado devolvem o resultado já gravado com HTTP 200 e não repetem a movimentação. Mesmo operador e chave com outro payload retorna HTTP 409 com o código `IDEMPOTENCY_KEY_REUSED`.
 - Operações recusadas não deixam transação ou lançamento parcial; a chave pode ser usada depois de uma falha recusada.
 - Cada transação concluída armazena o operador, o atendimento, as contas, o valor, a tarifa, o fingerprint, a chave e a resposta original.
 - A listagem de clientes mascara CPF; transferências e extrato mascaram número da conta e nome do titular da contraparte. Nenhuma resposta inclui hash de senha.
@@ -61,5 +68,5 @@ Os horários usam `BANK_TIMEZONE=America/Sao_Paulo`. O limite noturno do PIX, pa
 ## Limites desta versão
 
 - PIX, TED e INTERNAL são operações no mesmo banco fictício; não há conexão financeira real.
-- Não há feriados, limite PIX acumulado por período, refresh token, recuperação de senha, perfis múltiplos de operador nem conferência de documento.
+- Não há feriados, limite PIX noturno acumulado (o limite noturno continua por operação), refresh token, recuperação de senha, perfis múltiplos de operador nem conferência de documento.
 - A API é demonstrativa e não deve ser usada para processar dados reais ou dinheiro real.
