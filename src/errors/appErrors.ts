@@ -50,4 +50,6 @@ export const appErrors = {
     new AppError(404, 'DESTINATION_ACCOUNT_NOT_FOUND', 'Conta de destino não encontrada.'),
   ownBeneficiary: () =>
     new AppError(422, 'INVALID_BENEFICIARY_DESTINATION', 'Destino inválido para favorecido.'),
+  amountAboveLimit: () =>
+    new AppError(422, 'AMOUNT_ABOVE_LIMIT', 'Valor acima do limite por operação.'),
 };

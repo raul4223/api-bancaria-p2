@@ -7,8 +7,9 @@ import {
 
 const amountSchema = z
   .string()
-  .regex(/^\d+$/)
-  .refine((value) => BigInt(value) > 0n);
+  .regex(/^\d{1,15}$/)
+  .refine((value) => BigInt(value) > 0n)
+  .openapi({ example: '30000', description: 'Valor em centavos, como string' });
 
 // Validar os dados de depósito em uma conta do cliente atendido
 export const depositSchema = z.object({

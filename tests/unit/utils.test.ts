@@ -20,6 +20,11 @@ describe('utils de dinheiro', () => {
   it.each(['0', '-1', '1.50', 'abc', ' 10'])('recusa centavos inválidos: %s', (value) => {
     expect(() => parseCents(value)).toThrow();
   });
+
+  it('aceita o valor igual ao teto e recusa o valor acima dele', () => {
+    expect(parseCents('1000', 1_000n)).toBe(1_000n);
+    expect(() => parseCents('1001', 1_000n)).toThrow('Valor acima do limite por operação.');
+  });
 });
 
 describe('validação de CPF', () => {
