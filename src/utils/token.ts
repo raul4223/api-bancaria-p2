@@ -3,7 +3,7 @@ import { env } from '../config/env.js';
 
 const secret = new TextEncoder().encode(env.jwtSecret);
 
-// Emitir um token de acesso de sessenta minutos para o operador
+// Emitir um token de acesso com a duração configurada para o operador
 export function createAccessToken(userId: string): Promise<string> {
   return new SignJWT({})
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
@@ -11,7 +11,7 @@ export function createAccessToken(userId: string): Promise<string> {
     .setIssuer(env.jwtIssuer)
     .setAudience(env.jwtAudience)
     .setIssuedAt()
-    .setExpirationTime('60m')
+    .setExpirationTime(env.accessTokenTtl)
     .sign(secret);
 }
 

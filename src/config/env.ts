@@ -12,7 +12,10 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_ISSUER: z.string().min(1),
   JWT_AUDIENCE: z.string().min(1),
-  ACCESS_TOKEN_TTL: z.literal('60m').default('60m'),
+  ACCESS_TOKEN_TTL: z
+    .string()
+    .regex(/^\d+[mh]$/)
+    .default('60m'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
