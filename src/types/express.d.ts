@@ -4,7 +4,6 @@ declare global {
       auth?: { operatorUserId: string };
       serviceSession?: { serviceSessionId: string; customerId: string; operatorUserId: string };
       validatedQuery?: unknown;
-      validatedHeaders?: unknown;
     }
   }
 }
