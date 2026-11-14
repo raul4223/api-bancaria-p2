@@ -55,17 +55,23 @@ O middleware de atendimento exige `X-Service-Session-Id`, verifica operador, sta
 ```mermaid
 flowchart TD
   A[POST /customer-service/transactions/transfers] --> B[JWT + atendimento + headers validados]
-  B --> C[TransferService valida origem e resolve destino]
+  B --> B2{BENEFICIARY?}
+  B2 -->|sim| B3[Resolve o favorecido do cliente atendido em PIX ou TED; outro cliente = 404]
+  B2 -->|não| C
+  B3 --> C[TransferService valida origem e resolve destino]
   C --> D{Tipo}
   D -->|PIX| E[Localiza chave e aplica limite noturno]
-  D -->|TED| F[Localiza agência e conta; aplica horário e tarifa]
+  D -->|TED| F[Localiza agência e conta; recusa mesmo titular; aplica horário e tarifa]
   D -->|INTERNAL| G[Exige mesmo titular]
   E --> H[Confere titularidade, status e saldo + tarifa]
   F --> H
   G --> H
   H --> I[Inicia transação Prisma]
   I --> J[Cria BankTransaction com operador, sessão e idempotência]
-  J --> K[UPDATE condicional: débito na origem]
+  J --> J2{PIX ou TED?}
+  J2 -->|sim| J3[Trava as contas do cliente e soma PIX e TED do dia bancário; acima do limite = 422 DAILY_LIMIT_EXCEEDED]
+  J2 -->|INTERNAL| K
+  J3 --> K[UPDATE condicional: débito na origem]
   K --> L[Crédito no destino e, se TED, crédito da tarifa na SYSTEM]
   L --> M[Grava 2 ou 3 partidas no ledger]
   M --> N[Persiste resposta e confirma transação]
@@ -74,5 +80,7 @@ flowchart TD
   L -->|erro| P
   M -->|erro| P
 ```
+
+Na entrada `BENEFICIARY`, o `fingerprint` de idempotência usa o corpo original (com `beneficiaryId`), mas a transação é gravada com o tipo real, PIX ou TED. A soma do limite diário exclui a própria transação, que já foi gravada antes do bloco financeiro.
 
 As três regras estão em `src/services/transfer-rules/`. O fluxo real percorre `src/routes/customer-service.routes.ts` → `src/controllers/TransactionController.ts` → `src/services/TransferService.ts` → regra Strategy e repositories → Prisma. A atualização condicional é o controle de concorrência que impede saldo negativo.
