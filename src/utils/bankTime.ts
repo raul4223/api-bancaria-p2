@@ -43,3 +43,32 @@ export function isWithinBusinessHours(
 export function isNightTime(date: Date, timeZone: string, start: string, end: string): boolean {
   return isWithinTimeRange(getBankDate(date, timeZone).time, start, end);
 }
+
+// Calcular o instante UTC em que começa o dia bancário da data informada
+export function getBankDayStart(date: Date, timeZone: string): Date {
+  // Os valores padrão atendem ao noUncheckedIndexedAccess do tsconfig
+  const {
+    year = 0,
+    month = 1,
+    day = 1,
+    hour = 0,
+    minute = 0,
+    second = 0,
+  } = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(date)
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const localAsUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  const offsetMs = localAsUtc - Math.floor(date.getTime() / 1000) * 1000;
+  return new Date(Date.UTC(year, month - 1, day) - offsetMs);
+}

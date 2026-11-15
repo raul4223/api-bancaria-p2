@@ -4,8 +4,9 @@ import { appErrors } from '../errors/appErrors.js';
 import { AccountRepository } from '../repositories/AccountRepository.js';
 import { CustomerRepository } from '../repositories/CustomerRepository.js';
 import { PixKeyRepository } from '../repositories/PixKeyRepository.js';
-import { isValidPixEmail, isValidPixPhone, normalizePixKey } from '../utils/pixKey.js';
+import { isValidPixEmail, normalizePixKey, toPixPhone } from '../utils/pixKey.js';
 import { env } from '../config/env.js';
+import { prisma } from '../database/prisma.js';
 import { customerAgency } from '../utils/bankAccount.js';
 
 // Service que valida, move e remove chaves Pix do cliente atendido
@@ -45,20 +46,25 @@ export class PixKeyService {
     }
     if (input.keyType === 'EMAIL' && (!keyValue || !isValidPixEmail(keyValue)))
       throw appErrors.validation();
-    if (input.keyType === 'PHONE' && (!keyValue || !isValidPixPhone(keyValue)))
-      throw appErrors.validation();
+    if (input.keyType === 'PHONE') {
+      const phone = toPixPhone(input.keyValue ?? '');
+      if (phone === null) throw appErrors.validation();
+      keyValue = phone;
+    }
     if (!keyValue) throw appErrors.validation();
-    if (
-      (await this.pixKeyRepository.countByAccount(account.id, customerId)) >= env.pixKeysPerAccount
-    )
-      throw appErrors.pixKeyLimit();
 
     try {
-      return await this.pixKeyRepository.create({
-        customerId,
-        accountId: account.id,
-        keyType: input.keyType,
-        keyValue,
+      return await prisma.$transaction(async (tx) => {
+        await this.accountRepository.lockById(account.id, tx);
+        if (
+          (await this.pixKeyRepository.countByAccount(account.id, customerId, tx)) >=
+          env.pixKeysPerAccount
+        )
+          throw appErrors.pixKeyLimit();
+        return this.pixKeyRepository.create(
+          { customerId, accountId: account.id, keyType: input.keyType, keyValue },
+          tx,
+        );
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
@@ -85,7 +91,7 @@ export class PixKeyService {
 
   // Mover chave Pix para outra conta ativa do mesmo cliente
   async update(id: string, input: { accountNumber: string }, customerId: string) {
-    await this.getById(id, customerId);
+    const key = await this.getById(id, customerId);
     const account = await this.accountRepository.findByNumberForCustomer(
       customerAgency,
       input.accountNumber,
@@ -93,13 +99,17 @@ export class PixKeyService {
     );
     if (!account) throw appErrors.notFound('Conta');
     if (account.status !== 'ACTIVE') throw appErrors.accountBlocked();
-    if (
-      account.id !== (await this.getById(id, customerId)).accountId &&
-      (await this.pixKeyRepository.countByAccount(account.id, customerId)) >= env.pixKeysPerAccount
-    )
-      throw appErrors.pixKeyLimit();
-    const result = await this.pixKeyRepository.update(id, customerId, account.id);
-    if (result.count === 0) throw appErrors.notFound('Chave Pix');
+    await prisma.$transaction(async (tx) => {
+      await this.accountRepository.lockById(account.id, tx);
+      if (
+        account.id !== key.accountId &&
+        (await this.pixKeyRepository.countByAccount(account.id, customerId, tx)) >=
+          env.pixKeysPerAccount
+      )
+        throw appErrors.pixKeyLimit();
+      const result = await this.pixKeyRepository.update(id, customerId, account.id, tx);
+      if (result.count === 0) throw appErrors.notFound('Chave Pix');
+    });
     return this.getById(id, customerId);
   }
 

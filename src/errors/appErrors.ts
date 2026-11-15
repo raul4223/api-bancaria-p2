@@ -29,7 +29,7 @@ export const appErrors = {
   invalidAmount: () =>
     new AppError(422, 'INVALID_AMOUNT', 'O valor deve ser positivo em centavos.'),
   idempotencyConflict: () =>
-    new AppError(409, 'IDEMPOTENCY_CONFLICT', 'Chave de idempotência usada com outros dados.'),
+    new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'Chave de idempotência usada com outros dados.'),
   pixKeyNotFound: () => new AppError(404, 'PIX_KEY_NOT_FOUND', 'Chave Pix não encontrada.'),
   pixKeyConflict: () => new AppError(409, 'PIX_KEY_ALREADY_EXISTS', 'Chave Pix já cadastrada.'),
   pixKeyLimit: () =>
@@ -54,4 +54,12 @@ export const appErrors = {
     new AppError(403, 'SERVICE_SESSION_CUSTOMER_MISMATCH', 'O atendimento é de outro cliente.'),
   accountStatusUnchanged: () =>
     new AppError(422, 'ACCOUNT_STATUS_UNCHANGED', 'A conta já está no status informado.'),
+  amountAboveLimit: () =>
+    new AppError(422, 'AMOUNT_ABOVE_LIMIT', 'Valor acima do limite por operação.'),
+  dailyLimitExceeded: () =>
+    new AppError(422, 'DAILY_LIMIT_EXCEEDED', 'Limite diário de transferências atingido.'),
+  tedSameOwner: () =>
+    new AppError(422, 'TED_SAME_OWNER_USE_INTERNAL', 'Para contas do mesmo titular use INTERNAL.'),
+  destinationUnavailable: () =>
+    new AppError(422, 'DESTINATION_UNAVAILABLE', 'A conta de destino não pode receber.'),
 };

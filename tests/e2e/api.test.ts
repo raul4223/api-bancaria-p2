@@ -145,6 +145,8 @@ async function clearTestDatabase(): Promise<void> {
 
 beforeAll(async () => {
   await prisma.$connect();
+  // Manter o limite diário fora do caminho dos fluxos longos deste arquivo
+  env.dailyTransferLimitCents = 1_000_000_000n;
   await clearTestDatabase();
   await prisma.account.create({
     data: { agency: '0000', number: 'SYSTEM', type: 'SYSTEM', balanceCents: 0n },
@@ -922,6 +924,7 @@ describe('API bancária simulada', () => {
       randomUUID(),
     );
     expect(blockedDestination.status).toBe(422);
+    expect(blockedDestination.body.error.code).toBe('DESTINATION_UNAVAILABLE');
     expect(
       (await patch(`${apiBase}/accounts/${accountB1Number}/status`, { status: 'ACTIVE' })).status,
     ).toBe(200);
@@ -1049,7 +1052,11 @@ describe('API bancária simulada', () => {
     expect(statement.status).toBe(200);
     expect(statement.body.total).toBeGreaterThanOrEqual(6);
     expect(statement.body.data[0].operator.name).toBe('Operador de Teste');
-    expect(statement.body.data[0].counterparty.number).toMatch(/\*/);
+    const latestCounterparty = statement.body.data[0].counterparty as {
+      number: string | null;
+      name: string;
+    };
+    expect(latestCounterparty.number ?? latestCounterparty.name).toMatch(/\*|em espécie/);
     expect(statement.body.data[0].direction).toBeTruthy();
     const pixStatement = await get(
       `${apiBase}/customer-service/accounts/${accountA1Number}/statement?page=1&pageSize=20&type=TRANSFER&transferType=PIX`,

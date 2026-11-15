@@ -7,8 +7,9 @@ import {
 
 const amountSchema = z
   .string()
-  .regex(/^\d+$/)
-  .refine((value) => BigInt(value) > 0n);
+  .regex(/^\d{1,15}$/)
+  .refine((value) => BigInt(value) > 0n)
+  .openapi({ example: '30000', description: 'Valor em centavos, como string' });
 
 // Validar os dados de depósito em uma conta do cliente atendido
 export const depositSchema = z.object({
@@ -48,14 +49,26 @@ export const transferSchema = z.discriminatedUnion('transferType', [
     amountCents: amountSchema,
     description: z.string().trim().max(240).optional(),
   }),
+  z.object({
+    transferType: z.literal('BENEFICIARY'),
+    sourceAccountNumber: accountNumberSchema,
+    beneficiaryId: z.string().uuid(),
+    amountCents: amountSchema,
+    description: z.string().trim().max(240).optional(),
+  }),
 ]);
 
 // Validar filtros e paginação de extrato de uma conta
-export const statementQuerySchema = paginationSchema.extend({
-  from: z.iso.datetime().optional(),
-  to: z.iso.datetime().optional(),
-  type: z.enum(['DEPOSIT', 'WITHDRAWAL', 'TRANSFER']).optional(),
-  transferType: z.enum(['PIX', 'TED', 'INTERNAL']).optional(),
-});
+export const statementQuerySchema = paginationSchema
+  .extend({
+    from: z.iso.datetime().optional(),
+    to: z.iso.datetime().optional(),
+    type: z.enum(['DEPOSIT', 'WITHDRAWAL', 'TRANSFER']).optional(),
+    transferType: z.enum(['PIX', 'TED', 'INTERNAL']).optional(),
+  })
+  .refine((query) => !query.from || !query.to || new Date(query.from) <= new Date(query.to), {
+    message: 'A data inicial deve ser anterior à final',
+    path: ['to'],
+  });
 
 export { accountNumberParamsSchema };

@@ -92,4 +92,14 @@ export class AccountRepository {
   findSystem(client: DatabaseClient = prisma) {
     return client.account.findFirst({ where: { type: 'SYSTEM' } });
   }
+
+  // Travar as contas do cliente para serializar a conferência do limite diário
+  async lockCustomerAccounts(customerId: string, client: DatabaseClient): Promise<void> {
+    await client.$queryRaw`SELECT id FROM Account WHERE customerId = ${customerId} FOR UPDATE`;
+  }
+
+  // Travar a conta até o fim da transação
+  async lockById(id: string, client: DatabaseClient): Promise<void> {
+    await client.$queryRaw`SELECT id FROM Account WHERE id = ${id} FOR UPDATE`;
+  }
 }

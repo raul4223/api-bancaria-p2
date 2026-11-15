@@ -73,6 +73,16 @@ describe('regra TED', () => {
     expect(() => rule.validate(createTransferContext({ transferType: 'TED' }))).toThrow();
   });
 
+  it('recusa TED entre contas do mesmo titular antes de conferir o horário', () => {
+    const clock = createClock(new Date('2026-11-07T20:30:00.000Z'));
+    const rule = new TedTransferRule(config, clock);
+    const context = createTransferContext({
+      transferType: 'TED',
+      destinationCustomerId: 'customer-a',
+    });
+    expect(() => rule.validate(context)).toThrow('Para contas do mesmo titular use INTERNAL.');
+  });
+
   it('permite TED quando a regra de horário está desligada', () => {
     const clock = createClock(new Date('2026-11-07T20:30:00.000Z'));
     const rule = new TedTransferRule({ ...config, tedBusinessHoursEnabled: false }, clock);

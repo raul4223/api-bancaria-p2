@@ -71,6 +71,8 @@ O resultado esperado é:
 | SYSTEM          |      −R$ 90,00 |
 | Soma dos saldos |        R$ 0,00 |
 
+Depois de conferir a tabela, mostre o favorecido da agenda: em `POST /api/v1/customer-service/transactions/transfers`, envie `{"transferType":"BENEFICIARY","sourceAccountNumber":"NUMERO_DA_CONTA_A1","beneficiaryId":"ID_DO_FAVORECIDO_B","amountCents":"1000"}` com um novo `Idempotency-Key`. A transação aparece gravada como `TED`, com tarifa, e os saldos da tabela deixam de valer.
+
 Se a demonstração ocorrer fora do horário configurado de TED, mostre primeiro a recusa e, para demonstrar o sucesso, ajuste localmente `TED_BUSINESS_HOURS_ENABLED=false` e reinicie a API. Entre 20h e 6h, PIX de R$ 30,00 fica abaixo do limite noturno padrão de R$ 1.000,00.
 
 ## 6. Idempotência, saldo e bloqueios

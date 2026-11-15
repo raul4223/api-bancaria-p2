@@ -41,6 +41,8 @@ const envSchema = z.object({
     .default('06:00'),
   PIX_NIGHT_LIMIT_CENTS: z.coerce.bigint().positive().default(100_000n),
   PIX_KEYS_PER_ACCOUNT: z.coerce.number().int().positive().default(5),
+  MAX_OPERATION_CENTS: z.coerce.bigint().positive().default(100_000_000n),
+  DAILY_TRANSFER_LIMIT_CENTS: z.coerce.bigint().positive().default(500_000n),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -102,4 +104,6 @@ export const env = {
   pixNightEnd: parsed.data.PIX_NIGHT_END,
   pixNightLimitCents: parsed.data.PIX_NIGHT_LIMIT_CENTS,
   pixKeysPerAccount: parsed.data.PIX_KEYS_PER_ACCOUNT,
+  maxOperationCents: parsed.data.MAX_OPERATION_CENTS,
+  dailyTransferLimitCents: parsed.data.DAILY_TRANSFER_LIMIT_CENTS,
 };

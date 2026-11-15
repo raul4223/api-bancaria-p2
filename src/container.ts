@@ -50,6 +50,7 @@ const transferService = new TransferService(
   pixKeyRepository,
   transactionRepository,
   transactionService,
+  beneficiaryRepository,
 );
 const ledgerService = new LedgerService(transactionRepository);
 const pixKeyService = new PixKeyService(pixKeyRepository, accountRepository, customerRepository);
