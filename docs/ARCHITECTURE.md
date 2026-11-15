@@ -17,9 +17,10 @@ flowchart LR
 - **Controller:** lê a requisição, chama o service e converte o resultado em HTTP; não consulta Prisma.
 - **Service:** implementa regras de negócio, cálculos, autorização por cliente, transações e erros de aplicação; não conhece `Request` nem `Response` do Express.
 - **Repository:** executa operações Prisma sem decidir regras de negócio ou status HTTP.
+- **Banco (`src/database/`):** guarda o Prisma Client, o `TransactionManager` e os helpers de erro do Prisma. É a única porta de entrada para o banco fora dos repositories.
 - **Utils:** funções reutilizáveis para dinheiro, CPF, horário, máscara, hash, JWT e idempotência.
 
-O `src/container.ts` instancia repositories, services e controllers. A composição fica explícita e a interface HTTP permanece separada das regras de negócio. Rotas não calculam valores nem acessam o banco; controllers não implementam regras; services não montam respostas Express; repositories não decidem permissões ou regras de transferência.
+O `src/container.ts` instancia o `TransactionManager`, os repositories, os services e os controllers. A composição fica explícita e a interface HTTP permanece separada das regras de negócio. Rotas não calculam valores nem acessam o banco; controllers não implementam regras; services não montam respostas Express; repositories não decidem permissões ou regras de transferência.
 
 ## Padrões
 
@@ -37,6 +38,7 @@ O `src/container.ts` instancia repositories, services e controllers. A composiç
 - O banco E2E fica em `TEST_DATABASE_URL` (`bank_api_test`). A configuração `prisma.test.config.ts` limita migrations ao destino de teste; o setup limpa apenas tabelas desse banco.
 - Valores são `BIGINT` em centavos. Débitos de cliente usam `UPDATE` condicional (`ACTIVE` e saldo maior ou igual ao débito); o update, os créditos, a transação e as partidas de ledger são confirmados ou revertidos juntos.
 - A conta SYSTEM pode ficar negativa. Constraints de banco impedem saldo negativo de cliente e valores financeiros inválidos. A rota de conciliação compara partidas e saldos materializados.
+- **Transações sem Prisma nos services:** os services não importam o Prisma Client. Quando uma regra precisa de várias escritas atômicas, o service recebe o `TransactionManager` pelo construtor e chama `this.transactionManager.run(async (tx) => ...)`; o `tx` é repassado aos métodos dos repositories, que aceitam um `DatabaseClient` opcional. Erros do banco são reconhecidos por `isUniqueViolation` (chave única, P2002) e `isWriteConflict` (conflito ou deadlock, P2034), definidos em `src/database/prismaErrors.ts`. Os services ainda usam tipos gerados pelo Prisma (por exemplo `Prisma.CustomerWhereInput`), só em tempo de compilação.
 - A chave idempotente e o fingerprint são gravados na mesma transação que movimenta saldos. Reenvio igual retorna a resposta persistida; reuso conflitante retorna 409.
 
 ## Justificativa das tecnologias
