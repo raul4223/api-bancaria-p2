@@ -10,6 +10,7 @@ import { createAccessToken } from '../../src/utils/token.js';
 import { SignJWT } from 'jose';
 import { AccountRepository } from '../../src/repositories/AccountRepository.js';
 import { TransactionRepository } from '../../src/repositories/TransactionRepository.js';
+import { TransactionManager } from '../../src/database/transactionManager.js';
 import { TransactionService } from '../../src/services/TransactionService.js';
 
 const apiBase = '/api/v1';
@@ -1016,7 +1017,11 @@ describe('API bancária simulada', () => {
     failingLedgerRepository.createLedgerEntries = () => {
       throw new Error('Falha simulada ao inserir ledger.');
     };
-    const failingService = new TransactionService(failingLedgerRepository, new AccountRepository());
+    const failingService = new TransactionService(
+      failingLedgerRepository,
+      new AccountRepository(),
+      new TransactionManager(),
+    );
     await expect(
       failingService.withdraw(
         { accountNumber: accountA1Number, amountCents: '100' },

@@ -1,5 +1,4 @@
-import { Prisma } from '../generated/prisma/client.ts';
-import { prisma } from '../database/prisma.js';
+import type { Prisma } from '../generated/prisma/client.ts';
 import { appErrors } from '../errors/appErrors.js';
 import { CustomerRepository } from '../repositories/CustomerRepository.js';
 import { ServiceSessionRepository } from '../repositories/ServiceSessionRepository.js';
@@ -7,6 +6,8 @@ import { AccountService } from './AccountService.js';
 import { hashPassword } from '../utils/password.js';
 import { maskCpf } from '../utils/mask.js';
 import { omitPasswordHash } from '../utils/presenters.js';
+import type { TransactionManager } from '../database/transactionManager.js';
+import { isUniqueViolation } from '../database/prismaErrors.js';
 
 // Service com regras de cadastro, consulta e manutenção de clientes
 export class CustomerService {
@@ -15,6 +16,7 @@ export class CustomerService {
     private readonly customerRepository: CustomerRepository,
     private readonly accountService: AccountService,
     private readonly serviceSessionRepository: ServiceSessionRepository,
+    private readonly transactionManager: TransactionManager,
   ) {}
 
   // Cadastrar cliente e abrir sua primeira conta numa única transação
@@ -28,7 +30,7 @@ export class CustomerService {
   }) {
     const passwordHash = await hashPassword(input.customerPassword);
     try {
-      const { customer, account } = await prisma.$transaction(async (tx) => {
+      const { customer, account } = await this.transactionManager.run(async (tx) => {
         const customer = await this.customerRepository.create(
           {
             name: input.name,
@@ -51,8 +53,7 @@ export class CustomerService {
         accounts: [{ ...account, balanceCents: account.balanceCents.toString() }],
       };
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        throw appErrors.duplicateCustomer();
+      if (isUniqueViolation(error)) throw appErrors.duplicateCustomer();
       throw error;
     }
   }
@@ -138,8 +139,7 @@ export class CustomerService {
       const customer = await this.customerRepository.update(customerId, data);
       return omitPasswordHash(customer);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        throw appErrors.duplicateCustomer();
+      if (isUniqueViolation(error)) throw appErrors.duplicateCustomer();
       throw error;
     }
   }
@@ -153,7 +153,7 @@ export class CustomerService {
     const { id: customerId } = await this.findByCpfOrFail(cpf);
     const passwordHash = await hashPassword(input.newCustomerPassword);
     const now = new Date();
-    await prisma.$transaction(async (tx) => {
+    await this.transactionManager.run(async (tx) => {
       await this.customerRepository.updatePassword(
         customerId,
         { passwordHash, changedAt: now, changedByUserId: operatorUserId },
@@ -166,7 +166,7 @@ export class CustomerService {
   // Excluir cadastro feito por engano: sem atendimentos, movimentações nem saldo
   async delete(cpf: string): Promise<void> {
     const { id: customerId } = await this.findByCpfOrFail(cpf);
-    await prisma.$transaction(async (tx) => {
+    await this.transactionManager.run(async (tx) => {
       await this.customerRepository.lockById(customerId, tx);
       const history = await this.customerRepository.getHistorySummary(customerId, tx);
       const hasHistory =

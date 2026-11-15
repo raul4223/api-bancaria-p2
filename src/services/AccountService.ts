@@ -1,12 +1,9 @@
 import { randomInt } from 'node:crypto';
-import type { Prisma } from '../generated/prisma/client.ts';
-import { prisma } from '../database/prisma.js';
 import { appErrors } from '../errors/appErrors.js';
 import { AccountRepository } from '../repositories/AccountRepository.js';
 import { AccountStatusHistoryRepository } from '../repositories/AccountStatusHistoryRepository.js';
 import { customerAgency } from '../utils/bankAccount.js';
-
-type DatabaseClient = Prisma.TransactionClient | typeof prisma;
+import type { DatabaseClient, TransactionManager } from '../database/transactionManager.js';
 
 // Service que abre e consulta contas de clientes
 export class AccountService {
@@ -14,10 +11,11 @@ export class AccountService {
   constructor(
     private readonly accountRepository: AccountRepository,
     private readonly statusHistoryRepository: AccountStatusHistoryRepository,
+    private readonly transactionManager: TransactionManager,
   ) {}
 
   // Gerar um número de conta de 7 dígitos ainda não usado na agência
-  private async generateNumber(client: DatabaseClient): Promise<string> {
+  private async generateNumber(client?: DatabaseClient): Promise<string> {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const number = String(randomInt(1_000_000, 10_000_000));
       if (!(await this.accountRepository.existsByNumber(customerAgency, number, client)))
@@ -30,7 +28,7 @@ export class AccountService {
   async createForCustomer(
     customerId: string,
     type: 'CHECKING' | 'SAVINGS',
-    client: DatabaseClient = prisma,
+    client?: DatabaseClient,
   ) {
     const number = await this.generateNumber(client);
     return this.accountRepository.create(
@@ -88,7 +86,7 @@ export class AccountService {
             blockedByUserId: operatorUserId,
           }
         : { status: 'ACTIVE' as const, blockReason: null, blockedAt: null, blockedByUserId: null };
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await this.transactionManager.run(async (tx) => {
       const result = await this.accountRepository.updateStatus(account.id, data, tx);
       await this.statusHistoryRepository.create(
         {

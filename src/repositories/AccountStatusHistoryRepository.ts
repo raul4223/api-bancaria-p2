@@ -1,7 +1,6 @@
 import { prisma } from '../database/prisma.js';
+import type { DatabaseClient } from '../database/transactionManager.js';
 import type { Prisma } from '../generated/prisma/client.ts';
-
-type DatabaseClient = Prisma.TransactionClient | typeof prisma;
 
 // Repository que registra e consulta o histórico de bloqueio e desbloqueio de contas
 export class AccountStatusHistoryRepository {
