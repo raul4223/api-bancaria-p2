@@ -1,3 +1,4 @@
+import { env } from '../config/env.js';
 import { appErrors } from '../errors/appErrors.js';
 import { verifyPassword } from '../utils/password.js';
 import { createAccessToken } from '../utils/token.js';
@@ -16,8 +17,13 @@ export class AuthService {
     return {
       accessToken: await createAccessToken(user.id),
       tokenType: 'Bearer',
-      expiresIn: '60m',
+      expiresIn: env.accessTokenTtl,
       operator: { id: user.id, name: user.name, email: user.email },
     };
+  }
+
+  // Conferir se o operador do token continua ativo
+  async isOperatorActive(operatorUserId: string): Promise<boolean> {
+    return (await this.userRepository.findActiveById(operatorUserId)) !== null;
   }
 }

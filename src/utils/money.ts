@@ -10,8 +10,3 @@ export function parseCents(value: string): bigint {
 export function formatCents(value: bigint): string {
   return value.toString();
 }
-
-// Somar valores monetários sem conversão para ponto flutuante
-export function addCents(...values: bigint[]): bigint {
-  return values.reduce((total, value) => total + value, 0n);
-}

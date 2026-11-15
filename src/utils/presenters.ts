@@ -1,5 +1,3 @@
-import { maskAccountNumber } from './mask.js';
-
 // Converter BigInt em string sem perder precisão no JSON
 export function presentBigInts<T>(value: T): T {
   return JSON.parse(
@@ -7,11 +5,6 @@ export function presentBigInts<T>(value: T): T {
       typeof entry === 'bigint' ? entry.toString() : entry,
     ),
   ) as T;
-}
-
-// Formatar conta sem revelar por inteiro os dados de destino
-export function presentAccount<T extends { number: string }>(account: T): T & { number: string } {
-  return { ...account, number: maskAccountNumber(account.number) };
 }
 
 // Remover hash de senha antes de devolver um registro HTTP

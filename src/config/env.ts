@@ -4,15 +4,13 @@ import { z } from 'zod';
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   TEST_DATABASE_URL: z.string().url(),
-  DATABASE_HOST: z.string().min(1),
-  DATABASE_PORT: z.coerce.number().int().min(1).max(65535),
-  DATABASE_USER: z.string().min(1),
-  DATABASE_PASSWORD: z.string(),
-  DATABASE_NAME: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   JWT_ISSUER: z.string().min(1),
   JWT_AUDIENCE: z.string().min(1),
-  ACCESS_TOKEN_TTL: z.literal('60m').default('60m'),
+  ACCESS_TOKEN_TTL: z
+    .string()
+    .regex(/^\d+[mh]$/)
+    .default('60m'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -70,16 +68,9 @@ function readDatabaseUrl(value: string): {
   };
 }
 
-const databaseConnection =
-  parsed.data.NODE_ENV === 'test'
-    ? readDatabaseUrl(parsed.data.TEST_DATABASE_URL)
-    : {
-        host: parsed.data.DATABASE_HOST,
-        port: parsed.data.DATABASE_PORT,
-        user: parsed.data.DATABASE_USER,
-        password: parsed.data.DATABASE_PASSWORD,
-        database: parsed.data.DATABASE_NAME,
-      };
+const databaseConnection = readDatabaseUrl(
+  parsed.data.NODE_ENV === 'test' ? parsed.data.TEST_DATABASE_URL : parsed.data.DATABASE_URL,
+);
 
 export const env = {
   databaseUrl:

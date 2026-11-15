@@ -34,11 +34,6 @@ export class AccountRepository {
     return prisma.account.count({ where: { customerId } });
   }
 
-  // Buscar conta por ID sem revelar contas de outros clientes
-  findByIdForCustomer(id: string, customerId: string) {
-    return prisma.account.findFirst({ where: { id, customerId } });
-  }
-
   // Buscar conta pela agência e número sem revelar contas de outros clientes
   findByNumberForCustomer(agency: string, number: string, customerId: string) {
     return prisma.account.findFirst({ where: { agency, number, customerId } });

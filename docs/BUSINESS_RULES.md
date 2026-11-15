@@ -63,3 +63,4 @@ Os horários usam `BANK_TIMEZONE=America/Sao_Paulo`. O limite noturno do PIX, pa
 - PIX, TED e INTERNAL são operações no mesmo banco fictício; não há conexão financeira real.
 - Não há feriados, limite PIX acumulado por período, refresh token, recuperação de senha, perfis múltiplos de operador nem conferência de documento.
 - A API é demonstrativa e não deve ser usada para processar dados reais ou dinheiro real.
+- Erros de entrada HTTP usam o formato padronizado `{ "error": { "code", "message" } }`: JSON malformado retorna `400 INVALID_JSON`, corpo acima do limite de 100kb retorna `413 PAYLOAD_TOO_LARGE` e rota inexistente retorna `404 ROUTE_NOT_FOUND`.
