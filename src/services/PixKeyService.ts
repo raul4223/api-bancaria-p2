@@ -11,7 +11,7 @@ import { isUniqueViolation } from '../database/prismaErrors.js';
 
 // Service que valida, move e remove chaves Pix do cliente atendido
 export class PixKeyService {
-  // Receber repositories de clientes, contas e chaves Pix
+  // Receber repositories de clientes, contas e chaves Pix e o gerenciador de transações
   constructor(
     private readonly pixKeyRepository: PixKeyRepository,
     private readonly accountRepository: AccountRepository,

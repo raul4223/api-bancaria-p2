@@ -30,7 +30,7 @@ type IdempotentOperationResult<T> = { result: T; replayed: boolean };
 
 // Service de depósitos, saques, extrato e execução financeira idempotente
 export class TransactionService {
-  // Receber repositories de contas e de transações
+  // Receber repositories de contas e de transações e o gerenciador de transações
   constructor(
     private readonly transactionRepository: TransactionRepository,
     private readonly accountRepository: AccountRepository,

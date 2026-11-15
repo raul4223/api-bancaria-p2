@@ -11,7 +11,7 @@ import { isUniqueViolation } from '../database/prismaErrors.js';
 
 // Service com regras de cadastro, consulta e manutenção de clientes
 export class CustomerService {
-  // Receber os repositories de clientes e atendimentos e o service que abre contas
+  // Receber repositories, o service que abre contas e o gerenciador de transações
   constructor(
     private readonly customerRepository: CustomerRepository,
     private readonly accountService: AccountService,

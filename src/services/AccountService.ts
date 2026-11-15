@@ -7,7 +7,7 @@ import type { DatabaseClient, TransactionManager } from '../database/transaction
 
 // Service que abre e consulta contas de clientes
 export class AccountService {
-  // Receber os repositories de contas e de histórico de status
+  // Receber os repositories de contas e de histórico de status e o gerenciador de transações
   constructor(
     private readonly accountRepository: AccountRepository,
     private readonly statusHistoryRepository: AccountStatusHistoryRepository,
