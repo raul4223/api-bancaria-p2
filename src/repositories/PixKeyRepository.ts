@@ -1,7 +1,5 @@
 import { prisma } from '../database/prisma.js';
-import type { Prisma } from '../generated/prisma/client.ts';
-
-type DatabaseClient = Prisma.TransactionClient | typeof prisma;
+import type { DatabaseClient } from '../database/transactionManager.js';
 
 // Repository que acessa as chaves Pix registradas pelos clientes
 export class PixKeyRepository {

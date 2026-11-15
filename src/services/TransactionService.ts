@@ -1,6 +1,5 @@
-import { Prisma } from '../generated/prisma/client.ts';
+import type { Prisma } from '../generated/prisma/client.ts';
 import type { TransactionType } from '../generated/prisma/enums.ts';
-import { prisma } from '../database/prisma.js';
 import { AppError } from '../errors/AppError.js';
 import { appErrors } from '../errors/appErrors.js';
 import { AccountRepository } from '../repositories/AccountRepository.js';
@@ -9,6 +8,8 @@ import { createFingerprint } from '../utils/idempotency.js';
 import { parseCents } from '../utils/money.js';
 import { maskAccountNumber, maskName } from '../utils/mask.js';
 import { customerAgency } from '../utils/bankAccount.js';
+import type { TransactionManager } from '../database/transactionManager.js';
+import { isWriteConflict } from '../database/prismaErrors.js';
 
 type OperationInput = {
   operatorUserId: string;
@@ -29,10 +30,11 @@ type IdempotentOperationResult<T> = { result: T; replayed: boolean };
 
 // Service de depósitos, saques, extrato e execução financeira idempotente
 export class TransactionService {
-  // Receber repositories de contas e de transações
+  // Receber repositories de contas e de transações e o gerenciador de transações
   constructor(
     private readonly transactionRepository: TransactionRepository,
     private readonly accountRepository: AccountRepository,
+    private readonly transactionManager: TransactionManager,
   ) {}
 
   // Recuperar resultado anterior ou rejeitar reutilização conflitante da chave
@@ -76,7 +78,7 @@ export class TransactionService {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        const result = await prisma.$transaction(
+        const result = await this.transactionManager.run(
           async (tx) => {
             const transaction = await this.transactionRepository.create(
               {
@@ -111,7 +113,7 @@ export class TransactionService {
       } catch (error) {
         const stored = await readExisting();
         if (stored) return stored;
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        if (isWriteConflict(error)) {
           if (attempt < 2) continue;
           throw new AppError(
             409,

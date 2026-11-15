@@ -1,7 +1,6 @@
 import { prisma } from '../database/prisma.js';
+import type { DatabaseClient } from '../database/transactionManager.js';
 import type { Prisma } from '../generated/prisma/client.ts';
-
-type DatabaseClient = Prisma.TransactionClient | typeof prisma;
 
 // Repository que registra atendimentos e tentativas de senha
 export class ServiceSessionRepository {

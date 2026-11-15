@@ -6,6 +6,7 @@ import { ServiceSessionRepository } from './repositories/ServiceSessionRepositor
 import { TransactionRepository } from './repositories/TransactionRepository.js';
 import { UserRepository } from './repositories/UserRepository.js';
 import { AccountStatusHistoryRepository } from './repositories/AccountStatusHistoryRepository.js';
+import { TransactionManager } from './database/transactionManager.js';
 import { AccountService } from './services/AccountService.js';
 import { AuthService } from './services/AuthService.js';
 import { BeneficiaryService } from './services/BeneficiaryService.js';
@@ -24,6 +25,7 @@ import { PixKeyController } from './controllers/PixKeyController.js';
 import { ServiceSessionController } from './controllers/ServiceSessionController.js';
 import { TransactionController } from './controllers/TransactionController.js';
 
+const transactionManager = new TransactionManager();
 const userRepository = new UserRepository();
 const customerRepository = new CustomerRepository();
 const serviceSessionRepository = new ServiceSessionRepository();
@@ -38,13 +40,22 @@ const serviceSessionService = new ServiceSessionService(
   serviceSessionRepository,
   customerRepository,
 );
-const accountService = new AccountService(accountRepository, accountStatusHistoryRepository);
+const accountService = new AccountService(
+  accountRepository,
+  accountStatusHistoryRepository,
+  transactionManager,
+);
 const customerService = new CustomerService(
   customerRepository,
   accountService,
   serviceSessionRepository,
+  transactionManager,
 );
-const transactionService = new TransactionService(transactionRepository, accountRepository);
+const transactionService = new TransactionService(
+  transactionRepository,
+  accountRepository,
+  transactionManager,
+);
 const transferService = new TransferService(
   accountRepository,
   pixKeyRepository,
@@ -53,7 +64,12 @@ const transferService = new TransferService(
   beneficiaryRepository,
 );
 const ledgerService = new LedgerService(transactionRepository);
-const pixKeyService = new PixKeyService(pixKeyRepository, accountRepository, customerRepository);
+const pixKeyService = new PixKeyService(
+  pixKeyRepository,
+  accountRepository,
+  customerRepository,
+  transactionManager,
+);
 const beneficiaryService = new BeneficiaryService(
   beneficiaryRepository,
   accountRepository,

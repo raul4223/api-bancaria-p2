@@ -1,21 +1,22 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '../generated/prisma/client.ts';
 import { appErrors } from '../errors/appErrors.js';
 import { AccountRepository } from '../repositories/AccountRepository.js';
 import { CustomerRepository } from '../repositories/CustomerRepository.js';
 import { PixKeyRepository } from '../repositories/PixKeyRepository.js';
 import { isValidPixEmail, normalizePixKey, toPixPhone } from '../utils/pixKey.js';
 import { env } from '../config/env.js';
-import { prisma } from '../database/prisma.js';
 import { customerAgency } from '../utils/bankAccount.js';
+import type { TransactionManager } from '../database/transactionManager.js';
+import { isUniqueViolation } from '../database/prismaErrors.js';
 
 // Service que valida, move e remove chaves Pix do cliente atendido
 export class PixKeyService {
-  // Receber repositories de clientes, contas e chaves Pix
+  // Receber repositories de clientes, contas e chaves Pix e o gerenciador de transações
   constructor(
     private readonly pixKeyRepository: PixKeyRepository,
     private readonly accountRepository: AccountRepository,
     private readonly customerRepository: CustomerRepository,
+    private readonly transactionManager: TransactionManager,
   ) {}
 
   // Criar chave Pix validando titularidade e limite da conta
@@ -54,7 +55,7 @@ export class PixKeyService {
     if (!keyValue) throw appErrors.validation();
 
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await this.transactionManager.run(async (tx) => {
         await this.accountRepository.lockById(account.id, tx);
         if (
           (await this.pixKeyRepository.countByAccount(account.id, customerId, tx)) >=
@@ -67,8 +68,7 @@ export class PixKeyService {
         );
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        throw appErrors.pixKeyConflict();
+      if (isUniqueViolation(error)) throw appErrors.pixKeyConflict();
       throw error;
     }
   }
@@ -99,7 +99,7 @@ export class PixKeyService {
     );
     if (!account) throw appErrors.notFound('Conta');
     if (account.status !== 'ACTIVE') throw appErrors.accountBlocked();
-    await prisma.$transaction(async (tx) => {
+    await this.transactionManager.run(async (tx) => {
       await this.accountRepository.lockById(account.id, tx);
       if (
         account.id !== key.accountId &&
