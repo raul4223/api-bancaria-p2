@@ -6,12 +6,16 @@ API acadêmica para apoiar o atendimento presencial de clientes que precisam de 
 
 ## O que o projeto entrega
 
-- 27 rotas funcionais e 3 rotas auxiliares, documentadas em OpenAPI.
+- 30 rotas funcionais e 3 rotas auxiliares, documentadas em OpenAPI (33 operações).
 - CRUDs completos de Clientes, Chaves Pix e Favorecidos.
-- Login de administrador master com JWT e senha com hash Argon2id.
-- Atendimentos autorizados pela senha do cliente, com expiração e bloqueio após tentativas erradas.
-- Contas correntes e poupança, depósitos, saques e transferências PIX, TED e internas.
+- Login de administrador master com JWT e senha com hash Argon2id; o token de um operador desativado deixa de valer.
+- Atendimentos autorizados pela senha do cliente, com expiração, bloqueio após tentativas erradas e consulta do atendimento atual.
+- Troca de senha esquecida no balcão, com conferência de documento e registro do operador.
+- Contas correntes e poupança, depósitos, saques e transferências PIX, TED, internas e para favorecido salvo.
+- Bloqueio e desbloqueio de conta com motivo e histórico consultável.
+- Teto por operação e limite diário somado de PIX e TED por cliente.
 - Ledger de partidas dobradas, idempotência, proteção contra saldo negativo e conciliação.
+- Erros no formato `{ "error": { "code", "message" } }`, inclusive para JSON inválido, corpo grande e rota inexistente.
 - Swagger UI em `/docs` e especificação em `/openapi.json`.
 
 ## Contexto e regra de negócio
@@ -30,7 +34,7 @@ flowchart LR
   P --> DB[(MySQL 8.4)]
 ```
 
-As regras de negócio ficam nos Services. Regras específicas de PIX, TED e transferência interna usam três Strategies. Veja [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para responsabilidades, convenções e justificativas das tecnologias.
+As regras de negócio ficam nos Services. Regras específicas de PIX, TED e transferência interna usam três Strategies. Só os Repositories acessam o Prisma; quando um Service precisa de várias escritas atômicas, ele usa o `TransactionManager` de `src/database/`. Veja [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para responsabilidades, convenções e justificativas das tecnologias.
 
 ## Pré-requisitos
 
@@ -46,7 +50,23 @@ Na raiz do projeto:
 cp .env.example .env
 ```
 
-Revise o `.env` e substitua os valores de desenvolvimento por valores próprios. Configure `ADMIN_NAME`, `ADMIN_EMAIL` e `ADMIN_PASSWORD`; use uma `JWT_SECRET` aleatória com pelo menos 32 caracteres. Não versione o `.env`.
+Revise o `.env` e substitua os valores de desenvolvimento por valores próprios. Configure `ADMIN_NAME`, `ADMIN_EMAIL` e `ADMIN_PASSWORD`; use uma `JWT_SECRET` aleatória com pelo menos 32 caracteres. A conexão com o banco vem só de `DATABASE_URL` (o E2E usa `TEST_DATABASE_URL`). Não versione o `.env`.
+
+Variáveis de regra que podem ser ajustadas:
+
+| Variável                         | Padrão              | Uso                                               |
+| -------------------------------- | ------------------- | ------------------------------------------------- |
+| `ACCESS_TOKEN_TTL`               | `60m`               | Duração do JWT do operador (`m` ou `h`)           |
+| `SERVICE_SESSION_TTL_MINUTES`    | `30`                | Duração do atendimento                            |
+| `CUSTOMER_MAX_PASSWORD_ATTEMPTS` | `5`                 | Senhas erradas antes do bloqueio                  |
+| `CUSTOMER_PASSWORD_LOCK_MINUTES` | `15`                | Duração do bloqueio por senha errada              |
+| `TED_FEE_CENTS`                  | `500`               | Tarifa da TED                                     |
+| `TED_BUSINESS_HOURS_ENABLED`     | `true`              | Liga a regra de dias úteis e horário da TED       |
+| `PIX_NIGHT_LIMIT_CENTS`          | `100000`            | Limite do PIX por operação no período noturno     |
+| `PIX_KEYS_PER_ACCOUNT`           | `5`                 | Máximo de chaves Pix por conta                    |
+| `MAX_OPERATION_CENTS`            | `100000000`         | Teto de depósito, saque e transferência           |
+| `DAILY_TRANSFER_LIMIT_CENTS`     | `500000`            | Limite diário somado de PIX e TED por cliente     |
+| `BANK_TIMEZONE`                  | `America/Sao_Paulo` | Fuso usado para horário da TED, PIX noturno e dia |
 
 Suba o banco local e instale as dependências. O Compose usa o projeto e o volume `api-banco-p2-isolated`, com a porta do host `3307`; assim, os comandos deste repositório não substituem outros containers do projeto `apibanco` nem o MySQL local em `3306`.
 
@@ -98,7 +118,9 @@ Use o `accessToken` recebido no botão **Authorize** (`bearerAuth`). Para inicia
 
 O cadastro do cliente (`POST /api/v1/customers`) já abre a primeira conta (corrente por padrão) e devolve a agência e o número. Clientes são consultados, alterados e excluídos pelo **CPF** (`/api/v1/customers/{cpf}`). Contas são identificadas pelo **número da conta** (7 dígitos, agência `0001`), devolvido na abertura e na listagem `GET /api/v1/customer-service/accounts`; use esse número em depósitos, saques, transferências, extrato e bloqueio.
 
-O fluxo de transferência também exige um UUID novo em `Idempotency-Key`. Repetir a mesma requisição com a mesma chave devolve a resposta gravada com HTTP 200; reutilizar a chave com outro payload retorna 409.
+Para alterar nome, e-mail ou telefone (`PATCH /api/v1/customers/{cpf}`), o atendimento aberto precisa ser do **mesmo** cliente. Se o cliente esqueceu a senha, o operador confere o documento e usa `PATCH /api/v1/customers/{cpf}/password` com `identityConfirmed: true`; a troca encerra os atendimentos abertos dele. `GET /api/v1/service-sessions/current` devolve o atendimento aberto do operador.
+
+Depósitos, saques e transferências também exigem um UUID novo em `Idempotency-Key`. Repetir a mesma requisição com a mesma chave devolve a resposta gravada com HTTP 200; reutilizar a chave com outro payload retorna 409.
 
 ## Testes e comandos
 
@@ -111,6 +133,14 @@ npm test
 ```
 
 Os testes unitários não precisam de banco. Os testes E2E aplicam migrations e limpam **somente** as tabelas da database indicada por `TEST_DATABASE_URL`, que deve apontar para `bank_api_test`. Nunca aponte essa variável para dados de desenvolvimento ou produção.
+
+Os testes E2E ficam em `tests/e2e/`, um arquivo por assunto (autenticação, clientes, atendimentos, contas, chaves Pix, favorecidos, movimentações, transferências, horário bancário, erros HTTP e documentação), com helpers compartilhados em `tests/e2e/helpers.ts`. Cada arquivo prepara os próprios dados, e os arquivos rodam em série.
+
+Depois de atualizar o código com migrations novas, aplique-as no banco de desenvolvimento sem apagar dados:
+
+```bash
+npx prisma migrate deploy
+```
 
 Outros comandos disponíveis:
 
@@ -125,8 +155,12 @@ Outros comandos disponíveis:
 
 ## Regras resumidas
 
-- Valores entram e saem como centavos inteiros em string; o processamento usa `bigint`, nunca ponto flutuante.
-- INTERNAL só aceita outra conta do mesmo cliente. PIX usa uma chave cadastrada e aplica limite noturno por transferência. TED usa uma tarifa fixa e, quando habilitado, funciona em dias úteis e horário configurado.
+- Valores entram e saem como centavos inteiros em string (até 15 dígitos); o processamento usa `bigint`, nunca ponto flutuante. Acima do teto por operação a API responde `AMOUNT_ABOVE_LIMIT`.
+- INTERNAL só aceita outra conta do mesmo cliente. PIX usa uma chave cadastrada e aplica limite noturno por transferência. TED usa uma tarifa fixa e, quando habilitado, funciona em dias úteis e horário configurado; TED entre contas do mesmo titular é recusada (`TED_SAME_OWNER_USE_INTERNAL`).
+- A soma de PIX e TED enviados pelo cliente no dia bancário não pode passar do limite diário (`DAILY_LIMIT_EXCEEDED`). INTERNAL, depósito e saque não entram na soma.
+- `transferType: "BENEFICIARY"` com `beneficiaryId` transfere para um favorecido salvo; a transação é gravada como PIX ou TED e as regras do destino são conferidas de novo.
+- Chave Pix de telefone é guardada como `+55DDDNÚMERO`. Numa transferência, 11 dígitos sem `+` são lidos como CPF.
+- Conta bloqueada não envia nem recebe. Destino bloqueado de outro cliente responde `DESTINATION_UNAVAILABLE`, sem revelar o status da conta.
 - A tarifa de TED é debitada da origem e creditada na SYSTEM. Toda operação financeira grava débitos e créditos no ledger dentro da mesma transação de banco.
 - A SYSTEM pode ficar negativa; contas de clientes não. O saldo de cliente é debitado com atualização condicional no banco.
 - O ledger pode ser conferido em `GET /api/v1/ledger/reconciliation`.
@@ -135,6 +169,6 @@ Veja [docs/BUSINESS_RULES.md](docs/BUSINESS_RULES.md), [docs/API_FLOWS.md](docs/
 
 ## Entrega acadêmica
 
-O grupo deve revisar e preparar os slides finais, criar ou publicar o repositório público no GitHub e enviar o link e os slides pelo Google Classroom no prazo informado pelo professor. O prazo não foi registrado no material disponível. O projeto não publica arquivos nem define a visibilidade do repositório.
+O grupo deve revisar e preparar os slides finais e enviar o link deste repositório e os slides pelo Google Classroom no prazo informado pelo professor. O prazo não foi registrado no material disponível. O projeto não publica arquivos nem define a visibilidade do repositório.
 
 Antes de publicar, removam dados de teste locais, usem apenas credenciais fictícias e confirmem que `.env`, tokens, banco local e arquivos gerados não entraram no Git.
