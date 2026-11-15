@@ -4,6 +4,7 @@ import type { CustomerService } from '../services/CustomerService.js';
 import type {
   createCustomerSchema,
   listCustomersSchema,
+  resetCustomerPasswordSchema,
   updateCustomerSchema,
 } from '../schemas/customer.schemas.js';
 
@@ -39,8 +40,19 @@ export class CustomerController {
     const result = await this.customerService.update(
       req.params.cpf as string,
       req.body as z.infer<typeof updateCustomerSchema>,
+      req.serviceSession!.customerId,
     );
     res.status(200).json(result);
+  };
+
+  // Redefinir a senha de atendimento depois da conferência do documento
+  resetPassword = async (req: Request, res: Response) => {
+    await this.customerService.resetPassword(
+      req.params.cpf as string,
+      req.body as z.infer<typeof resetCustomerPasswordSchema>,
+      req.auth!.operatorUserId,
+    );
+    res.status(204).send();
   };
 
   // Excluir cliente sem histórico e devolver HTTP 204

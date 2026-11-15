@@ -1,3 +1,4 @@
+import type { Prisma } from '../generated/prisma/client.ts';
 import { appErrors } from '../errors/appErrors.js';
 import { ServiceSessionRepository } from '../repositories/ServiceSessionRepository.js';
 import { CustomerRepository } from '../repositories/CustomerRepository.js';
@@ -6,6 +7,8 @@ import { systemClock, type Clock } from '../utils/clock.js';
 import { maskCpf } from '../utils/mask.js';
 import { env } from '../config/env.js';
 import { omitPasswordHash } from '../utils/presenters.js';
+
+type SessionWithCustomer = Prisma.ServiceSessionGetPayload<{ include: { customer: true } }>;
 
 // Service que abre, valida e encerra atendimentos autorizados pelo cliente
 export class ServiceSessionService {
@@ -27,6 +30,7 @@ export class ServiceSessionService {
     if (!(await verifyPassword(customer.passwordHash, input.customerPassword))) {
       const attempts = await this.sessionRepository.incrementFailedAttempts(
         customer.id,
+        now,
         env.customerMaxPasswordAttempts,
         env.customerPasswordLockMinutes,
       );
@@ -43,8 +47,18 @@ export class ServiceSessionService {
       openedAt: now,
       expiresAt: new Date(now.getTime() + env.serviceSessionTtlMinutes * 60_000),
     });
-    const { cpf, ...customerData } = session.customer;
-    return { ...session, customer: { ...omitPasswordHash(customerData), cpf: maskCpf(cpf) } };
+    return this.presentSession(session);
+  }
+
+  // Buscar o atendimento aberto e ainda válido do operador autenticado
+  async getCurrent(operatorUserId: string) {
+    const session = await this.sessionRepository.findOpenForOperator(operatorUserId);
+    if (!session) throw appErrors.notFound('Atendimento');
+    if (session.expiresAt <= this.clock.now()) {
+      await this.sessionRepository.expire(session.id);
+      throw appErrors.notFound('Atendimento');
+    }
+    return this.presentSession(session);
   }
 
   // Fechar atendimento aberto que pertence ao operador autenticado
@@ -72,5 +86,11 @@ export class ServiceSessionService {
       throw appErrors.sessionInvalid();
     }
     return { serviceSessionId: session.id, customerId: session.customerId, operatorUserId };
+  }
+
+  // Montar a resposta do atendimento com CPF mascarado e sem hash de senha
+  private presentSession(session: SessionWithCustomer) {
+    const { cpf, ...customerData } = session.customer;
+    return { ...session, customer: { ...omitPasswordHash(customerData), cpf: maskCpf(cpf) } };
   }
 }

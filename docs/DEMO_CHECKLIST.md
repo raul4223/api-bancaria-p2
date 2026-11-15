@@ -81,6 +81,15 @@ Se a demonstração ocorrer fora do horário configurado de TED, mostre primeiro
 - Feche o atendimento de A e tente movimentar com o mesmo ID: resposta esperada HTTP 403.
 - Bloqueie B1 com motivo usando `PATCH /api/v1/accounts/{accountNumber}/status`, mostre uma operação recusada e reative a conta.
 - Para demonstrar o bloqueio de senha, envie cinco senhas incorretas ao abrir um atendimento para um cliente fictício: resposta final HTTP 423. O bloqueio local dura 15 minutos.
+- Bloqueie e desbloqueie uma conta e mostre `GET /api/v1/accounts/{accountNumber}/status-history`: duas linhas, com motivo e operador. Repetir o status atual devolve 422.
+
+## 6.1. Cliente esqueceu a senha (reset no balcão)
+
+1. Com o cliente fictício bloqueado no passo anterior, confira o documento original com foto (simulado).
+2. Envie `PATCH /api/v1/customers/{cpf}/password` com `{"newCustomerPassword":"583926","identityConfirmed":true}`: resposta 204. Sem `identityConfirmed` ou com senha fraca, 422.
+3. Abra o atendimento com a senha antiga (401) e depois com a nova (201): o bloqueio sumiu.
+4. Com esse atendimento selecionado, altere o telefone em `PATCH /api/v1/customers/{cpf}`. Sem atendimento a resposta é 401; com atendimento de outro cliente, 403.
+5. Se a tela for recarregada, recupere o atendimento em `GET /api/v1/service-sessions/current`.
 
 ## 7. Auditoria e conciliação
 

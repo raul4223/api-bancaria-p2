@@ -50,4 +50,8 @@ export const appErrors = {
     new AppError(404, 'DESTINATION_ACCOUNT_NOT_FOUND', 'Conta de destino não encontrada.'),
   ownBeneficiary: () =>
     new AppError(422, 'INVALID_BENEFICIARY_DESTINATION', 'Destino inválido para favorecido.'),
+  sessionCustomerMismatch: () =>
+    new AppError(403, 'SERVICE_SESSION_CUSTOMER_MISMATCH', 'O atendimento é de outro cliente.'),
+  accountStatusUnchanged: () =>
+    new AppError(422, 'ACCOUNT_STATUS_UNCHANGED', 'A conta já está no status informado.'),
 };

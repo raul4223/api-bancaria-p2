@@ -3,14 +3,18 @@ import type { Prisma } from '../generated/prisma/client.ts';
 import { prisma } from '../database/prisma.js';
 import { appErrors } from '../errors/appErrors.js';
 import { AccountRepository } from '../repositories/AccountRepository.js';
+import { AccountStatusHistoryRepository } from '../repositories/AccountStatusHistoryRepository.js';
 import { customerAgency } from '../utils/bankAccount.js';
 
 type DatabaseClient = Prisma.TransactionClient | typeof prisma;
 
 // Service que abre e consulta contas de clientes
 export class AccountService {
-  // Receber o repository de contas
-  constructor(private readonly accountRepository: AccountRepository) {}
+  // Receber os repositories de contas e de histórico de status
+  constructor(
+    private readonly accountRepository: AccountRepository,
+    private readonly statusHistoryRepository: AccountStatusHistoryRepository,
+  ) {}
 
   // Gerar um número de conta de 7 dígitos ainda não usado na agência
   private async generateNumber(client: DatabaseClient): Promise<string> {
@@ -67,21 +71,53 @@ export class AccountService {
   // Bloquear ou desbloquear conta geral com auditoria do operador
   async changeStatus(
     accountNumber: string,
-    input: { status: 'BLOCKED'; reason: string } | { status: 'ACTIVE' },
+    input:
+      { status: 'BLOCKED'; reason: string } | { status: 'ACTIVE'; reason?: string | undefined },
     operatorUserId: string,
   ) {
     const account = await this.accountRepository.findByNumber(customerAgency, accountNumber);
     if (!account || account.type === 'SYSTEM') throw appErrors.notFound('Conta');
+    if (account.status === input.status) throw appErrors.accountStatusUnchanged();
+    const now = new Date();
     const data =
       input.status === 'BLOCKED'
         ? {
             status: 'BLOCKED' as const,
             blockReason: input.reason,
-            blockedAt: new Date(),
+            blockedAt: now,
             blockedByUserId: operatorUserId,
           }
         : { status: 'ACTIVE' as const, blockReason: null, blockedAt: null, blockedByUserId: null };
-    const updated = await this.accountRepository.updateStatus(account.id, data);
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await this.accountRepository.updateStatus(account.id, data, tx);
+      await this.statusHistoryRepository.create(
+        {
+          accountId: account.id,
+          operatorUserId,
+          fromStatus: account.status,
+          toStatus: input.status,
+          reason: input.reason ?? null,
+          createdAt: now,
+        },
+        tx,
+      );
+      return result;
+    });
     return { ...updated, balanceCents: updated.balanceCents.toString() };
+  }
+
+  // Listar o histórico de bloqueios e desbloqueios de uma conta de cliente
+  async listStatusHistory(accountNumber: string, input: { page: number; pageSize: number }) {
+    const account = await this.accountRepository.findByNumber(customerAgency, accountNumber);
+    if (!account || account.type === 'SYSTEM') throw appErrors.notFound('Conta');
+    const [data, total] = await Promise.all([
+      this.statusHistoryRepository.findMany(
+        account.id,
+        (input.page - 1) * input.pageSize,
+        input.pageSize,
+      ),
+      this.statusHistoryRepository.count(account.id),
+    ]);
+    return { data, page: input.page, pageSize: input.pageSize, total };
   }
 }

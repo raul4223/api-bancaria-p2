@@ -25,4 +25,10 @@ export class ServiceSessionController {
     );
     res.status(200).json(result);
   };
+
+  // Consultar o atendimento aberto do operador autenticado
+  getCurrent = async (req: Request, res: Response) => {
+    const result = await this.serviceSessionService.getCurrent(req.auth!.operatorUserId);
+    res.status(200).json(result);
+  };
 }

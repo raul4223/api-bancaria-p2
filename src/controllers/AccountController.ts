@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { z } from 'zod';
 import type { AccountService } from '../services/AccountService.js';
 import type {
+  listAccountStatusHistorySchema,
   listAccountsSchema,
   openAccountSchema,
   updateAccountStatusSchema,
@@ -46,6 +47,15 @@ export class AccountController {
       req.params.accountNumber as string,
       req.body as z.infer<typeof updateAccountStatusSchema>,
       req.auth!.operatorUserId,
+    );
+    res.status(200).json(result);
+  };
+
+  // Listar o histórico de bloqueios e desbloqueios de uma conta
+  listStatusHistory = async (req: Request, res: Response) => {
+    const result = await this.accountService.listStatusHistory(
+      req.params.accountNumber as string,
+      req.validatedQuery as z.infer<typeof listAccountStatusHistorySchema>,
     );
     res.status(200).json(result);
   };
