@@ -166,9 +166,4 @@ Outros comandos disponíveis:
 - O ledger pode ser conferido em `GET /api/v1/ledger/reconciliation`.
 
 Veja [docs/BUSINESS_RULES.md](docs/BUSINESS_RULES.md), [docs/API_FLOWS.md](docs/API_FLOWS.md), [docs/DEMO_CHECKLIST.md](docs/DEMO_CHECKLIST.md), [docs/REQUIREMENTS_P2.md](docs/REQUIREMENTS_P2.md) e [docs/PRESENTATION_40_50_MIN.md](docs/PRESENTATION_40_50_MIN.md).
-
-## Entrega acadêmica
-
-O grupo deve revisar e preparar os slides finais e enviar o link deste repositório e os slides pelo Google Classroom no prazo informado pelo professor. O prazo não foi registrado no material disponível. O projeto não publica arquivos nem define a visibilidade do repositório.
-
-Antes de publicar, removam dados de teste locais, usem apenas credenciais fictícias e confirmem que `.env`, tokens, banco local e arquivos gerados não entraram no Git.
+.
